@@ -320,6 +320,14 @@
     "feature_global_desc": "Presence in China, Dubai and Turkey for your imports.",
     "feature_reports": "Detailed Reports",
     "feature_reports_desc": "Analyze your operations with comprehensive financial reports.",
+    "feature_clients": "Client Management",
+    "feature_clients_desc": "Manage your client portfolio with complete tracking of each account.",
+    "feature_payments": "Payment Tracking",
+    "feature_payments_desc": "Record and track all payments via cash, mobile money or bank transfer.",
+    "feature_documents": "Document Management",
+    "feature_documents_desc": "Centralize all your shipment documents: photos, invoices, waybills.",
+    "feature_invoicing": "Automatic Invoicing",
+    "feature_invoicing_desc": "Generate professional PDF invoices and receipts with one click.",
     "process_label": "Steps",
     "process_title": "How it works",
     "process_desc": "A simple and transparent four-step process.",
@@ -418,7 +426,14 @@
       "other": "Other"
     },
     "location": "Location",
-    "location_placeholder": "E.g., Shanghai Warehouse, Dar es Salaam Port..."
+    "location_placeholder": "E.g., Shanghai Warehouse, Dar es Salaam Port...",
+    "share_tracking": "Tracking Link",
+    "copy_link": "Copy link",
+    "share_message": "Track your shipment here:",
+    "share_subject": "Track your shipment",
+    "files": "Files",
+    "drop_files": "Click to select files (images, PDF, documents...)",
+    "document_name_optional": "Document name (optional)"
   },
   "clients": {
     "title": "Clients",

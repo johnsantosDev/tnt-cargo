@@ -118,7 +118,14 @@
       "china": "中国",
       "dubai": "迪拜",
       "other": "其他"
-    }
+    },
+    "share_tracking": "分享追踪链接",
+    "copy_link": "复制链接",
+    "share_message": "追踪您的TNT Cargo货运：",
+    "share_subject": "TNT Cargo - 货运追踪",
+    "files": "文件",
+    "drop_files": "拖放文件到此处或点击浏览",
+    "document_name_optional": "文件名（可选）"
   },
   "clients": {
     "title": "客户",
@@ -411,6 +418,14 @@
     "feature_global_desc": "在中国、迪拜和土耳其设有办事处，服务您的进口需求。",
     "feature_reports": "详细报表",
     "feature_reports_desc": "通过全面的财务报表分析您的运营情况。",
+    "feature_clients": "客户管理",
+    "feature_clients_desc": "全面管理您的客户组合，跟踪每个账户。",
+    "feature_payments": "付款追踪",
+    "feature_payments_desc": "记录和追踪所有现金、移动支付或银行转账付款。",
+    "feature_documents": "文档管理",
+    "feature_documents_desc": "集中管理所有运输文件：照片、发票、运单。",
+    "feature_invoicing": "自动开票",
+    "feature_invoicing_desc": "一键生成专业的PDF发票和收据。",
     "process_label": "步骤",
     "process_title": "运作流程",
     "process_desc": "简单透明的四步流程。",

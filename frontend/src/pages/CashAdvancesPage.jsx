@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardHeader, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal, Textarea } from '../components/ui';
+import SearchableSelect from '../components/ui/SearchableSelect';
 import { Plus, Search, DollarSign, Edit2, Eye } from 'lucide-react';
 
 export default function CashAdvancesPage() {
@@ -140,10 +141,14 @@ function CashAdvanceFormModal({ data, onClose, onSaved }) {
   return (
     <Modal isOpen onClose={onClose} title={data ? t('cash_advances.edit') : t('cash_advances.create')}>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Select label={t('cash_advances.client')} value={form.client_id} onChange={set('client_id')} error={errors.client_id?.[0]} required>
-          <option value="">{t('common.select')}</option>
-          {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </Select>
+        <SearchableSelect
+          label={t('cash_advances.client')}
+          value={form.client_id}
+          onChange={set('client_id')}
+          options={clients.map(c => ({ value: c.id, label: c.name }))}
+          error={errors.client_id?.[0]}
+          placeholder={t('common.select')}
+        />
         <Input label={t('cash_advances.supplier_reference')} value={form.supplier_reference} onChange={set('supplier_reference')} error={errors.supplier_reference?.[0]} required />
         <div className="grid grid-cols-2 gap-4">
           <Input label={t('cash_advances.amount')} type="number" step="0.01" value={form.amount} onChange={set('amount')} error={errors.amount?.[0]} required />

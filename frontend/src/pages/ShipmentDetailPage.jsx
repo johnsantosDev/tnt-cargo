@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -18,11 +18,36 @@ export default function ShipmentDetailPage() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [statusForm, setStatusForm] = useState({ status_id: '', comment: '', location: '' });
   const [uploading, setUploading] = useState(false);
+  const [uploadFiles, setUploadFiles] = useState([]);
+  const [uploadName, setUploadName] = useState('');
+  const [docUrls, setDocUrls] = useState({});
+  const [previewDoc, setPreviewDoc] = useState(null);
 
   const fetch = () => {
     setLoading(true);
     api.get(`/shipments/${id}`).then(({ data }) => setShipment(data.data || data)).catch(console.error).finally(() => setLoading(false));
   };
+
+  const loadDocUrl = useCallback(async (doc) => {
+    if (docUrls[doc.id]) return;
+    try {
+      const res = await api.get(`/shipments/documents/${doc.id}/download`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      setDocUrls(prev => ({ ...prev, [doc.id]: url }));
+    } catch (e) { console.error(e); }
+  }, [docUrls]);
+
+  useEffect(() => {
+    if (shipment?.documents) {
+      shipment.documents.forEach(d => {
+        if (d.file_type?.startsWith('image/')) loadDocUrl(d);
+      });
+    }
+  }, [shipment?.documents]);
+
+  useEffect(() => {
+    return () => { Object.values(docUrls).forEach(url => URL.revokeObjectURL(url)); };
+  }, []);
 
   useEffect(() => {
     fetch();
@@ -39,24 +64,6 @@ export default function ShipmentDetailPage() {
     fetch();
   };
 
-  const handleUpload = async (e) => {
-    e.preventDefault();
-    setUploading(true);
-    const formData = new FormData();
-    const fileInput = e.target.querySelector('input[type=file]');
-    const nameInput = e.target.querySelector('input[name=name]');
-    formData.append('document', fileInput.files[0]);
-    formData.append('name', nameInput.value);
-    try {
-      await api.post(`/shipments/${id}/documents`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setShowUploadModal(false);
-      fetch();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setUploading(false);
-    }
-  };
 
   if (loading) return <Spinner />;
   if (!shipment) return null;
@@ -105,6 +112,58 @@ export default function ShipmentDetailPage() {
           </div>
         </CardBody>
       </Card>
+
+      {/* Share Link */}
+      {shipment.share_token && (
+        <Card>
+          <CardHeader>
+            <h3 className="font-semibold flex items-center gap-2">
+              <Share2 className="w-5 h-5 text-primary-600" />
+              {t('shipments.share_tracking')}
+            </h3>
+          </CardHeader>
+          <CardBody>
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl mb-4">
+              <Link2 className="w-5 h-5 text-gray-400 shrink-0" />
+              <code className="flex-1 text-sm text-gray-700 break-all select-all">{`${window.location.origin}/t/${shipment.share_token}`}</code>
+              <button
+                onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/t/${shipment.share_token}`); }}
+                className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                title={t('shipments.copy_link')}
+              >
+                <Copy className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const phone = shipment.client?.phone?.replace(/[^0-9]/g, '') || '';
+                  const clientName = shipment.client?.name || '';
+                  const msg = encodeURIComponent(`Bonjour ${clientName}, ${t('shipments.share_message')}\n${window.location.origin}/t/${shipment.share_token}\n— TNT Cargo`);
+                  window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
+              >
+                <MessageCircle className="w-4 h-4" />
+                WhatsApp
+              </button>
+              <button
+                onClick={() => {
+                  const email = shipment.client?.email || '';
+                  const clientName = shipment.client?.name || '';
+                  const subject = encodeURIComponent(`TNT Cargo — ${t('shipments.share_subject')} ${shipment.tracking_number}`);
+                  const body = encodeURIComponent(`Bonjour ${clientName},\n\n${t('shipments.share_message')}\n${window.location.origin}/t/${shipment.share_token}\n\nCordialement,\nTNT Cargo`);
+                  window.open(`mailto:${email}?subject=${subject}&body=${body}`, '_blank');
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
+              >
+                <Mail className="w-4 h-4" />
+                Email
+              </button>
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Details */}
@@ -225,29 +284,96 @@ export default function ShipmentDetailPage() {
             </Button>
           )}
         </CardHeader>
-        <CardBody className="p-0">
+        <CardBody>
           {(!shipment.documents || shipment.documents.length === 0) ? (
-            <div className="px-6 py-8 text-center text-sm text-gray-400">{t('shipments.no_documents')}</div>
+            <div className="py-8 text-center text-sm text-gray-400">{t('shipments.no_documents')}</div>
           ) : (
-            <div className="divide-y">
-              {shipment.documents.map((d) => (
-                <div key={d.id} className="px-6 py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <FileText className="w-5 h-5 text-gray-400" />
-                    <div>
-                      <p className="text-sm font-medium">{d.name}</p>
-                      <p className="text-xs text-gray-400">{formatDate(d.created_at)}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {shipment.documents.map((d) => {
+                const isImage = d.file_type?.startsWith('image/');
+                const blobUrl = docUrls[d.id];
+                return (
+                  <div key={d.id} className="border border-gray-200 rounded-xl overflow-hidden group">
+                    {isImage ? (
+                      <div className="relative h-40 bg-gray-100">
+                        {blobUrl ? (
+                          <img src={blobUrl} alt={d.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                          <button onClick={() => setPreviewDoc(d)} className="p-2 bg-white rounded-full shadow-lg">
+                            <Eye className="w-5 h-5 text-gray-700" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-40 bg-gray-50 flex items-center justify-center">
+                        <FileText className="w-12 h-12 text-gray-300" />
+                      </div>
+                    )}
+                    <div className="p-3 flex items-center justify-between">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{d.name}</p>
+                        <p className="text-xs text-gray-400">{formatDate(d.created_at)}</p>
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          onClick={async () => {
+                            const res = await api.get(`/shipments/documents/${d.id}/download`, { responseType: 'blob' });
+                            const url = URL.createObjectURL(res.data);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = d.name;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-primary-600"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                        {hasPermission('shipments.edit') && (
+                          <button
+                            onClick={async () => {
+                              if (!window.confirm(t('common.confirm_delete'))) return;
+                              await api.delete(`/shipments/documents/${d.id}`);
+                              fetch();
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-red-600"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <a href={d.url} target="_blank" rel="noreferrer" className="p-1.5 text-gray-400 hover:text-primary-600">
-                    <Download className="w-4 h-4" />
-                  </a>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardBody>
       </Card>
+
+      {/* Document Preview Modal */}
+      {previewDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setPreviewDoc(null)}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative max-w-4xl max-h-[90vh] z-10" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setPreviewDoc(null)} className="absolute -top-3 -right-3 z-20 p-2 bg-white rounded-full shadow-lg text-gray-500 hover:text-gray-700">
+              <X className="w-5 h-5" />
+            </button>
+            {docUrls[previewDoc.id] ? (
+              <img src={docUrls[previewDoc.id]} alt={previewDoc.name} className="max-w-full max-h-[85vh] rounded-xl shadow-2xl object-contain" />
+            ) : (
+              <div className="bg-white rounded-xl p-20 flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Status Update Modal */}
       <Modal isOpen={showStatusModal} onClose={() => setShowStatusModal(false)} title={t('shipments.update_status')}>
@@ -264,16 +390,72 @@ export default function ShipmentDetailPage() {
         </form>
       </Modal>
 
-      {/* Upload Modal */}
-      <Modal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} title={t('shipments.upload_document')}>
-        <form onSubmit={handleUpload} className="space-y-4">
-          <Input label={t('shipments.document_name')} name="name" required />
-          <Input label={t('shipments.file')} type="file" required />
-          <div className="flex justify-end gap-3">
-            <Button type="button" variant="secondary" onClick={() => setShowUploadModal(false)}>{t('common.cancel')}</Button>
-            <Button type="submit" loading={uploading}>{t('common.upload')}</Button>
+      {/* Upload Modal - Multi-file with Preview */}
+      <Modal isOpen={showUploadModal} onClose={() => { setShowUploadModal(false); setUploadFiles([]); }} title={t('shipments.upload_document')}>
+        <div className="space-y-4">
+          <Input label={t('shipments.document_name')} value={uploadName} onChange={(e) => setUploadName(e.target.value)} placeholder={t('shipments.document_name_optional')} />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('shipments.files')}</label>
+            <div
+              className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center cursor-pointer hover:border-primary-400 transition-colors"
+              onClick={() => document.getElementById('multi-file-input').click()}
+            >
+              <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">{t('shipments.drop_files')}</p>
+              <input
+                id="multi-file-input"
+                type="file"
+                multiple
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                className="hidden"
+                onChange={(e) => setUploadFiles(prev => [...prev, ...Array.from(e.target.files)])}
+              />
+            </div>
           </div>
-        </form>
+          {uploadFiles.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 max-h-60 overflow-y-auto">
+              {uploadFiles.map((file, i) => (
+                <div key={i} className="relative border rounded-lg p-2 flex items-center gap-2">
+                  {file.type.startsWith('image/') ? (
+                    <img src={URL.createObjectURL(file)} alt={file.name} className="w-12 h-12 rounded object-cover shrink-0" />
+                  ) : (
+                    <FileText className="w-12 h-12 text-gray-300 shrink-0" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium truncate">{file.name}</p>
+                    <p className="text-xs text-gray-400">{(file.size / 1024).toFixed(0)} KB</p>
+                  </div>
+                  <button onClick={() => setUploadFiles(prev => prev.filter((_, j) => j !== i))} className="p-1 text-gray-400 hover:text-red-500">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex justify-end gap-3">
+            <Button type="button" variant="secondary" onClick={() => { setShowUploadModal(false); setUploadFiles([]); }}>{t('common.cancel')}</Button>
+            <Button
+              loading={uploading}
+              disabled={uploadFiles.length === 0}
+              onClick={async () => {
+                setUploading(true);
+                const formData = new FormData();
+                uploadFiles.forEach(f => formData.append('documents[]', f));
+                if (uploadName) formData.append('name', uploadName);
+                try {
+                  await api.post(`/shipments/${id}/documents`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+                  setShowUploadModal(false);
+                  setUploadFiles([]);
+                  setUploadName('');
+                  fetch();
+                } catch (err) { console.error(err); }
+                finally { setUploading(false); }
+              }}
+            >
+              {t('common.upload')} ({uploadFiles.length})
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

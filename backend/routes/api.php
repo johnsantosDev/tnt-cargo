@@ -32,13 +32,16 @@ Route::middleware('auth:sanctum')->group(function () {
     // Shipments
     Route::apiResource('shipments', ShipmentController::class);
     Route::put('/shipments/{shipment}/status', [ShipmentController::class, 'updateStatus']);
-    Route::post('/shipments/{shipment}/documents', [ShipmentController::class, 'uploadDocument']);
+    Route::post('/shipments/{shipment}/documents', [ShipmentController::class, 'uploadDocuments']);
+    Route::get('/shipments/documents/{document}/download', [ShipmentController::class, 'downloadDocument']);
+    Route::delete('/shipments/documents/{document}', [ShipmentController::class, 'deleteDocument']);
 
     // Clients
     Route::apiResource('clients', ClientController::class);
 
     // Payments
     Route::apiResource('payments', PaymentController::class);
+    Route::get('/payments/{payment}/pdf', [PaymentController::class, 'downloadPdf']);
 
     // Expenses
     Route::apiResource('expenses', ExpenseController::class);

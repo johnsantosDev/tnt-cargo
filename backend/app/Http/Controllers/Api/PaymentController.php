@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Payment;
 use App\Models\Shipment;
 use App\Services\AuditService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -123,6 +124,13 @@ class PaymentController extends Controller
         $payment->delete();
 
         return response()->json(['message' => 'Paiement supprimé.']);
+    }
+
+    public function downloadPdf(Payment $payment)
+    {
+        $payment->load(['client', 'shipment', 'receiver', 'creator']);
+        $pdf = Pdf::loadView('payments.pdf', compact('payment'));
+        return $pdf->download("recu-{$payment->reference}.pdf");
     }
 
     private function recalculateClientDebt(int $clientId): void

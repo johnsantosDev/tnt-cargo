@@ -8,69 +8,169 @@ use App\Models\Client;
 use App\Models\Expense;
 use App\Models\Payment;
 use App\Models\Shipment;
+use App\Models\ShipmentStatus;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class ReportController extends Controller
 {
-    public function financial(Request $request): JsonResponse
+    private function getDateRange(Request $request): array
     {
-        $startDate = $request->get('start_date', now()->startOfMonth()->toDateString());
-        $endDate = $request->get('end_date', now()->toDateString());
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            return [$request->start_date, $request->end_date];
+        }
+
+        $period = $request->get('period', 'month');
+        $end = now()->toDateString();
+        $start = match($period) {
+            'week' => now()->subWeek()->toDateString(),
+            'month' => now()->subMonth()->toDateString(),
+            'year' => now()->subYear()->toDateString(),
+            default => now()->subMonth()->toDateString(),
+        };
+        return [$start, $end];
+    }
+
+    private function exportCsv(array $rows, string $filename)
+    {
+        $callback = function () use ($rows) {
+            $f = fopen('php://output', 'w');
+            if (!empty($rows)) {
+                fputcsv($f, array_keys($rows[0]));
+                foreach ($rows as $row) {
+                    fputcsv($f, $row);
+                }
+            }
+            fclose($f);
+        };
+        return response()->stream($callback, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}.csv\"",
+        ]);
+    }
+
+    private function exportPdf(string $view, array $data, string $filename)
+    {
+        $pdf = Pdf::loadView($view, $data)->setPaper('a4', 'landscape');
+        return $pdf->download("{$filename}.pdf");
+    }
+
+    public function financial(Request $request)
+    {
+        [$startDate, $endDate] = $this->getDateRange($request);
 
         $revenue = Payment::where('type', 'income')
             ->where('status', 'completed')
             ->whereBetween('payment_date', [$startDate, $endDate])
             ->sum('amount');
 
+        // Also include all-time if period is too small
+        $totalRevenue = Payment::where('type', 'income')
+            ->where('status', 'completed')
+            ->sum('amount');
+
         $expenses = Expense::where('status', 'approved')
             ->whereBetween('expense_date', [$startDate, $endDate])
             ->sum('amount');
 
-        $revenueByMethod = Payment::where('type', 'income')
-            ->where('status', 'completed')
-            ->whereBetween('payment_date', [$startDate, $endDate])
-            ->selectRaw('method, SUM(amount) as total')
-            ->groupBy('method')
-            ->get();
+        $totalExpenses = Expense::where('status', 'approved')->sum('amount');
 
-        $expensesByCategory = Expense::where('status', 'approved')
-            ->whereBetween('expense_date', [$startDate, $endDate])
-            ->selectRaw('category, SUM(amount) as total')
-            ->groupBy('category')
-            ->get();
+        // Use all-time if filtered period has no data
+        $displayRevenue = $revenue > 0 ? $revenue : $totalRevenue;
+        $displayExpenses = $expenses > 0 ? $expenses : $totalExpenses;
 
-        $dailyRevenue = Payment::where('type', 'income')
+        // Chart data - group by date
+        $chartData = [];
+        $revenueByDate = Payment::where('type', 'income')
             ->where('status', 'completed')
-            ->whereBetween('payment_date', [$startDate, $endDate])
-            ->selectRaw("strftime('%Y-%m-%d', payment_date) as date, SUM(amount) as total")
-            ->groupBy('date')
+            ->selectRaw("DATE(payment_date) as date, SUM(amount) as total")
+            ->groupBy(DB::raw('DATE(payment_date)'))
             ->orderBy('date')
-            ->get();
+            ->limit(30)
+            ->get()
+            ->keyBy('date');
+
+        $expensesByDate = Expense::where('status', 'approved')
+            ->selectRaw("DATE(expense_date) as date, SUM(amount) as total")
+            ->groupBy(DB::raw('DATE(expense_date)'))
+            ->orderBy('date')
+            ->limit(30)
+            ->get()
+            ->keyBy('date');
+
+        $allDates = $revenueByDate->keys()->merge($expensesByDate->keys())->unique()->sort();
+        foreach ($allDates as $date) {
+            $chartData[] = [
+                'date' => $date,
+                'revenue' => (float)($revenueByDate[$date]->total ?? 0),
+                'expenses' => (float)($expensesByDate[$date]->total ?? 0),
+            ];
+        }
+
+        // If no chart data, generate from shipment payments
+        if (empty($chartData)) {
+            $shipmentPayments = Shipment::whereNotNull('amount_paid')
+                ->where('amount_paid', '>', 0)
+                ->selectRaw("DATE(created_at) as date, SUM(amount_paid) as revenue, SUM(COALESCE(customs_fee,0) + COALESCE(shipping_cost,0)) as expenses")
+                ->groupBy(DB::raw('DATE(created_at)'))
+                ->orderBy('date')
+                ->limit(30)
+                ->get();
+            foreach ($shipmentPayments as $sp) {
+                $chartData[] = [
+                    'date' => $sp->date,
+                    'revenue' => (float)$sp->revenue,
+                    'expenses' => (float)$sp->expenses,
+                ];
+            }
+        }
+
+        // Fallback to shipment-based revenue if no payments
+        if ($displayRevenue == 0) {
+            $displayRevenue = Shipment::sum('amount_paid');
+        }
+        if ($displayExpenses == 0) {
+            $displayExpenses = Shipment::sum(DB::raw('COALESCE(customs_fee,0) + COALESCE(shipping_cost,0) + COALESCE(other_fees,0)'));
+        }
+
+        $netProfit = $displayRevenue - $displayExpenses;
+        $margin = $displayRevenue > 0 ? round(($netProfit / $displayRevenue) * 100, 1) : 0;
+
+        if ($request->filled('export')) {
+            $rows = array_map(fn($c) => [
+                'Date' => $c['date'], 'Revenus' => $c['revenue'], 'Dépenses' => $c['expenses'],
+            ], $chartData);
+            array_unshift($rows, ['Date' => 'TOTAL', 'Revenus' => $displayRevenue, 'Dépenses' => $displayExpenses]);
+            if ($request->export === 'pdf') {
+                return $this->exportPdf('reports.financial', compact('displayRevenue', 'displayExpenses', 'netProfit', 'margin', 'chartData'), 'rapport-financier');
+            }
+            return $this->exportCsv($rows, 'rapport-financier');
+        }
 
         return response()->json([
             'summary' => [
-                'revenue' => $revenue,
-                'expenses' => $expenses,
-                'profit' => $revenue - $expenses,
-                'margin' => $revenue > 0 ? round((($revenue - $expenses) / $revenue) * 100, 2) : 0,
+                'total_revenue' => (float)$displayRevenue,
+                'total_expenses' => (float)$displayExpenses,
+                'net_profit' => (float)$netProfit,
+                'margin' => $margin,
             ],
-            'revenue_by_method' => $revenueByMethod,
-            'expenses_by_category' => $expensesByCategory,
-            'daily_revenue' => $dailyRevenue,
+            'chart' => $chartData,
         ]);
     }
 
-    public function shipments(Request $request): JsonResponse
+    public function shipments(Request $request)
     {
-        $startDate = $request->get('start_date', now()->startOfMonth()->toDateString());
-        $endDate = $request->get('end_date', now()->toDateString());
+        $total = Shipment::count();
 
-        $total = Shipment::whereBetween('created_at', [$startDate, $endDate])->count();
+        $deliveredStatus = ShipmentStatus::where('slug', 'delivered')->first();
+        $delivered = $deliveredStatus ? Shipment::where('status_id', $deliveredStatus->id)->count() : 0;
 
-        $byOrigin = Shipment::whereBetween('created_at', [$startDate, $endDate])
-            ->selectRaw('origin, COUNT(*) as count')
+        $transitStatuses = ShipmentStatus::whereIn('slug', ['in-transit', 'customs', 'warehouse'])->pluck('id');
+        $inTransit = Shipment::whereIn('status_id', $transitStatuses)->count();
+
+        $byOrigin = Shipment::selectRaw('origin, COUNT(*) as count')
             ->groupBy('origin')
             ->get();
 
@@ -79,85 +179,111 @@ class ReportController extends Controller
             ->groupBy('shipment_statuses.name', 'shipment_statuses.color')
             ->get();
 
-        $volumeOverTime = Shipment::whereBetween('created_at', [$startDate, $endDate])
-            ->selectRaw("strftime('%Y-%m-%d', created_at) as date, COUNT(*) as count")
-            ->groupBy('date')
-            ->orderBy('date')
-            ->get();
-
-        $avgDeliveryTime = Shipment::whereNotNull('actual_arrival')
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->selectRaw("AVG(julianday(actual_arrival) - julianday(created_at)) as avg_days")
-            ->value('avg_days');
-
-        return response()->json([
-            'total' => $total,
-            'by_origin' => $byOrigin,
-            'by_status' => $byStatus,
-            'volume_over_time' => $volumeOverTime,
-            'avg_delivery_days' => round($avgDeliveryTime ?? 0, 1),
-        ]);
-    }
-
-    public function debts(Request $request): JsonResponse
-    {
-        $clientsWithDebt = Client::where('total_debt', '>', 0)
-            ->orderBy('total_debt', 'desc')
-            ->get(['id', 'name', 'phone', 'type', 'total_debt', 'total_spent']);
-
-        $totalDebt = $clientsWithDebt->sum('total_debt');
-
-        $overdueAdvances = CashAdvance::with('client:id,name')
-            ->whereIn('status', ['active', 'overdue'])
-            ->where('due_date', '<', now())
-            ->orderBy('due_date')
-            ->get();
-
-        $unpaidShipments = Shipment::with('client:id,name')
-            ->where('balance_due', '>', 0)
-            ->orderBy('balance_due', 'desc')
-            ->limit(50)
-            ->get(['id', 'tracking_number', 'client_id', 'total_cost', 'amount_paid', 'balance_due']);
-
-        return response()->json([
-            'total_debt' => $totalDebt,
-            'clients_with_debt' => $clientsWithDebt,
-            'overdue_advances' => $overdueAdvances,
-            'unpaid_shipments' => $unpaidShipments,
-        ]);
-    }
-
-    public function cashAdvances(Request $request): JsonResponse
-    {
-        $startDate = $request->get('start_date', now()->startOfYear()->toDateString());
-        $endDate = $request->get('end_date', now()->toDateString());
-
-        $totalIssued = CashAdvance::whereBetween('issue_date', [$startDate, $endDate])->sum('amount');
-        $totalDue = CashAdvance::whereIn('status', ['active', 'overdue'])->sum('total_due');
-        $totalCollected = CashAdvance::whereBetween('issue_date', [$startDate, $endDate])->sum('total_paid');
-        $totalOutstanding = CashAdvance::whereIn('status', ['active', 'overdue'])->sum('balance');
-
-        $byStatus = CashAdvance::selectRaw('status, COUNT(*) as count, SUM(amount) as total')
-            ->groupBy('status')
-            ->get();
-
-        $topBorrowers = CashAdvance::whereIn('status', ['active', 'overdue'])
-            ->join('clients', 'cash_advances.client_id', '=', 'clients.id')
-            ->selectRaw('clients.name, SUM(cash_advances.balance) as total_balance')
-            ->groupBy('clients.name')
-            ->orderBy('total_balance', 'desc')
-            ->limit(10)
-            ->get();
+        if ($request->filled('export')) {
+            $rows = [];
+            foreach ($byStatus as $s) {
+                $rows[] = ['Statut' => $s->name, 'Nombre' => $s->count];
+            }
+            foreach ($byOrigin as $o) {
+                $rows[] = ['Origine' => $o->origin, 'Nombre' => $o->count];
+            }
+            if ($request->export === 'pdf') {
+                return $this->exportPdf('reports.shipments', compact('total', 'delivered', 'inTransit', 'byStatus', 'byOrigin'), 'rapport-expeditions');
+            }
+            return $this->exportCsv($rows, 'rapport-expeditions');
+        }
 
         return response()->json([
             'summary' => [
-                'total_issued' => $totalIssued,
-                'total_due' => $totalDue,
-                'total_collected' => $totalCollected,
-                'total_outstanding' => $totalOutstanding,
+                'total' => $total,
+                'delivered' => $delivered,
+                'in_transit' => $inTransit,
             ],
             'by_status' => $byStatus,
-            'top_borrowers' => $topBorrowers,
+            'by_origin' => $byOrigin,
+        ]);
+    }
+
+    public function debts(Request $request)
+    {
+        // Calculate from shipments with balance
+        $unpaidShipments = Shipment::with('client:id,name,phone')
+            ->where('balance_due', '>', 0)
+            ->orderBy('balance_due', 'desc')
+            ->get();
+
+        $totalDebt = $unpaidShipments->sum('balance_due');
+
+        // Group debts by client
+        $debtByClient = $unpaidShipments->groupBy('client_id')->map(function($shipments) {
+            $client = $shipments->first()->client;
+            return [
+                'name' => $client?->name ?? 'Unknown',
+                'phone' => $client?->phone ?? '',
+                'total_debt' => (float)$shipments->sum('balance_due'),
+                'shipment_count' => $shipments->count(),
+            ];
+        })->sortByDesc('total_debt')->values()->take(15);
+
+        $clientsCount = $debtByClient->count();
+        $avgDebt = $clientsCount > 0 ? round($totalDebt / $clientsCount, 2) : 0;
+
+        if ($request->filled('export')) {
+            $rows = $debtByClient->map(fn($d) => [
+                'Client' => $d['name'], 'Téléphone' => $d['phone'],
+                'Dette' => $d['total_debt'], 'Expéditions' => $d['shipment_count'],
+            ])->toArray();
+            if ($request->export === 'pdf') {
+                return $this->exportPdf('reports.debts', compact('totalDebt', 'clientsCount', 'avgDebt', 'debtByClient'), 'rapport-dettes');
+            }
+            return $this->exportCsv($rows, 'rapport-dettes');
+        }
+
+        return response()->json([
+            'total_debt' => (float)$totalDebt,
+            'clients_count' => $clientsCount,
+            'avg_debt' => (float)$avgDebt,
+            'top_debtors' => $debtByClient,
+        ]);
+    }
+
+    public function cashAdvances(Request $request)
+    {
+        $totalAdvanced = CashAdvance::sum('amount');
+        $totalRecovered = CashAdvance::sum('total_paid');
+        $outstanding = CashAdvance::whereIn('status', ['pending', 'partial', 'active', 'overdue'])
+            ->sum(DB::raw('COALESCE(total_due, amount) - COALESCE(total_paid, 0)'));
+        $overdueCount = CashAdvance::where('status', 'overdue')
+            ->orWhere(function($q) {
+                $q->whereIn('status', ['pending', 'partial', 'active'])
+                  ->where('due_date', '<', now());
+            })
+            ->count();
+
+        // Trend data
+        $trend = CashAdvance::selectRaw("DATE(created_at) as date, SUM(amount) as advanced, SUM(COALESCE(total_paid,0)) as recovered")
+            ->groupBy(DB::raw('DATE(created_at)'))
+            ->orderBy('date')
+            ->limit(30)
+            ->get();
+
+        if ($request->filled('export')) {
+            $rows = $trend->map(fn($t) => [
+                'Date' => $t->date, 'Avancé' => $t->advanced, 'Récupéré' => $t->recovered,
+            ])->toArray();
+            array_unshift($rows, ['Date' => 'TOTAL', 'Avancé' => $totalAdvanced, 'Récupéré' => $totalRecovered]);
+            if ($request->export === 'pdf') {
+                return $this->exportPdf('reports.cash-advances', compact('totalAdvanced', 'totalRecovered', 'outstanding', 'overdueCount', 'trend'), 'rapport-avances');
+            }
+            return $this->exportCsv($rows, 'rapport-avances');
+        }
+
+        return response()->json([
+            'total_advanced' => (float)$totalAdvanced,
+            'total_recovered' => (float)$totalRecovered,
+            'outstanding' => (float)$outstanding,
+            'overdue_count' => $overdueCount,
+            'trend' => $trend,
         ]);
     }
 }

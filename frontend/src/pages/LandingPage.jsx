@@ -5,7 +5,7 @@ import {
   Package, Globe, Shield, BarChart3, Search, ArrowRight, Truck,
   MapPin, Clock, CheckCircle, Phone, Mail, Plane, Ship,
   Users, Headphones, Star, ChevronRight, Warehouse, FileCheck,
-  Box, Zap, Eye
+  Box, Zap, Eye, CreditCard, FileText, DollarSign, UserCheck
 } from 'lucide-react';
 
 export default function LandingPage() {
@@ -19,8 +19,11 @@ export default function LandingPage() {
   };
 
   const toggleLang = () => {
-    i18n.changeLanguage(i18n.language === 'fr' ? 'en' : 'fr');
+    const langs = ['fr', 'en', 'zh'];
+    const current = langs.indexOf(i18n.language);
+    i18n.changeLanguage(langs[(current + 1) % langs.length]);
   };
+  const langLabel = { fr: 'FR', en: 'EN', zh: '中文' };
 
   return (
     <div className="min-h-screen bg-white font-inter antialiased">
@@ -33,7 +36,7 @@ export default function LandingPage() {
           </div>
           <button onClick={toggleLang} className="flex items-center gap-1.5 hover:text-white transition-colors">
             <Globe className="w-3 h-3" />
-            {i18n.language === 'fr' ? 'EN' : 'FR'}
+            {langLabel[i18n.language] || 'FR'}
           </button>
         </div>
       </div>
@@ -276,7 +279,11 @@ export default function LandingPage() {
               { icon: Truck, title: t('landing.feature_tracking'), desc: t('landing.feature_tracking_desc'), color: 'bg-blue-50 text-blue-600' },
               { icon: Shield, title: t('landing.feature_security'), desc: t('landing.feature_security_desc'), color: 'bg-green-50 text-green-600' },
               { icon: Globe, title: t('landing.feature_global'), desc: t('landing.feature_global_desc'), color: 'bg-violet-50 text-violet-600' },
-              { icon: BarChart3, title: t('landing.feature_reports'), desc: t('landing.feature_reports_desc'), color: 'bg-amber-50 text-amber-600' }
+              { icon: BarChart3, title: t('landing.feature_reports'), desc: t('landing.feature_reports_desc'), color: 'bg-amber-50 text-amber-600' },
+              { icon: Users, title: t('landing.feature_clients'), desc: t('landing.feature_clients_desc'), color: 'bg-cyan-50 text-cyan-600' },
+              { icon: CreditCard, title: t('landing.feature_payments'), desc: t('landing.feature_payments_desc'), color: 'bg-pink-50 text-pink-600' },
+              { icon: FileText, title: t('landing.feature_documents'), desc: t('landing.feature_documents_desc'), color: 'bg-indigo-50 text-indigo-600' },
+              { icon: DollarSign, title: t('landing.feature_invoicing'), desc: t('landing.feature_invoicing_desc'), color: 'bg-emerald-50 text-emerald-600' }
             ].map((f, i) => (
               <div key={i} className="bg-white rounded-xl shadow-xs p-6 border border-gray-200 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
                 <div className={`inline-flex items-center justify-center w-11 h-11 rounded-xl ${f.color} mb-4`}>

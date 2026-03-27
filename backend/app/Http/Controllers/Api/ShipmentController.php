@@ -212,29 +212,50 @@ class ShipmentController extends Controller
         return response()->json(['message' => 'Expédition supprimée.']);
     }
 
-    public function uploadDocument(Request $request, Shipment $shipment): JsonResponse
+    public function uploadDocuments(Request $request, Shipment $shipment): JsonResponse
     {
         $request->validate([
-            'document' => 'required|file|max:10240|mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx',
-            'name' => 'required|string|max:255',
+            'documents' => 'required|array|min:1',
+            'documents.*' => 'required|file|max:10240|mimes:pdf,jpg,jpeg,png,gif,webp,doc,docx,xls,xlsx',
+            'name' => 'nullable|string|max:255',
         ]);
 
-        $file = $request->file('document');
-        $path = $file->store('shipment-documents/' . $shipment->id, 'local');
-
-        $doc = ShipmentDocument::create([
-            'shipment_id' => $shipment->id,
-            'name' => $request->name,
-            'file_path' => $path,
-            'file_type' => $file->getClientMimeType(),
-            'file_size' => $file->getSize(),
-            'uploaded_by' => $request->user()->id,
-        ]);
+        $docs = [];
+        foreach ($request->file('documents') as $file) {
+            $path = $file->store('shipment-documents/' . $shipment->id, 'local');
+            $docs[] = ShipmentDocument::create([
+                'shipment_id' => $shipment->id,
+                'name' => $request->name ?: $file->getClientOriginalName(),
+                'file_path' => $path,
+                'file_type' => $file->getClientMimeType(),
+                'file_size' => $file->getSize(),
+                'uploaded_by' => $request->user()->id,
+            ]);
+        }
 
         return response()->json([
-            'message' => 'Document téléchargé avec succès.',
-            'document' => $doc,
+            'message' => count($docs) . ' document(s) téléchargé(s) avec succès.',
+            'documents' => $docs,
         ], 201);
+    }
+
+    public function downloadDocument(ShipmentDocument $document)
+    {
+        $path = Storage::disk('local')->path($document->file_path);
+        if (!file_exists($path)) {
+            return response()->json(['message' => 'Fichier non trouvé.'], 404);
+        }
+        return response()->file($path, [
+            'Content-Type' => $document->file_type,
+            'Content-Disposition' => 'inline; filename="' . $document->name . '"',
+        ]);
+    }
+
+    public function deleteDocument(ShipmentDocument $document): JsonResponse
+    {
+        Storage::disk('local')->delete($document->file_path);
+        $document->delete();
+        return response()->json(['message' => 'Document supprimé.']);
     }
 
     public function statuses(): JsonResponse

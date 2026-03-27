@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
-import { Card, CardHeader, CardBody, Button, Select, Spinner } from '../components/ui';
-import { Download, TrendingUp, Package, AlertTriangle, Banknote } from 'lucide-react';
+import { Card, CardHeader, CardBody, Button, Select, Spinner, Input } from '../components/ui';
+import { Download, TrendingUp, Package, AlertTriangle, Banknote, FileText, FileSpreadsheet, Calendar } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend
@@ -14,16 +14,24 @@ export default function ReportsPage() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('financial');
   const [period, setPeriod] = useState('month');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [useCustomDates, setUseCustomDates] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchReport = useCallback(() => {
     setLoading(true);
-    api.get(`/reports/${activeTab}`, { params: { period } })
+    const params = useCustomDates && startDate && endDate
+      ? { start_date: startDate, end_date: endDate }
+      : { period };
+    api.get(`/reports/${activeTab}`, { params })
       .then(({ data }) => setData(data))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [activeTab, period]);
+  }, [activeTab, period, startDate, endDate, useCustomDates]);
+
+  useEffect(() => { fetchReport(); }, [fetchReport]);
 
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
 
@@ -34,13 +42,16 @@ export default function ReportsPage() {
     { key: 'cash-advances', label: t('reports.cash_advances'), icon: Banknote }
   ];
 
-  const handleExport = async () => {
+  const handleExport = async (format) => {
     try {
-      const response = await api.get(`/reports/${activeTab}`, { params: { period, export: 'csv' }, responseType: 'blob' });
+      const params = useCustomDates && startDate && endDate
+        ? { start_date: startDate, end_date: endDate, export: format }
+        : { period, export: format };
+      const response = await api.get(`/reports/${activeTab}`, { params, responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `rapport-${activeTab}-${period}.csv`);
+      link.setAttribute('download', `rapport-${activeTab}-${period}.${format === 'excel' ? 'xlsx' : format}`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -52,34 +63,55 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-gray-900">{t('reports.title')}</h1>
-        <div className="flex gap-2">
-          <Select value={period} onChange={(e) => setPeriod(e.target.value)}>
-            <option value="week">{t('dashboard.week')}</option>
-            <option value="month">{t('dashboard.month')}</option>
-            <option value="year">{t('dashboard.year')}</option>
-          </Select>
-          <Button variant="secondary" onClick={handleExport}>
-            <Download className="w-4 h-4 mr-2" />{t('reports.export')}
+        <div className="flex flex-wrap items-center gap-2">
+          {!useCustomDates && (
+            <Select value={period} onChange={(e) => setPeriod(e.target.value)}>
+              <option value="week">{t('dashboard.week')}</option>
+              <option value="month">{t('dashboard.month')}</option>
+              <option value="year">{t('dashboard.year')}</option>
+            </Select>
+          )}
+          {useCustomDates && (
+            <>
+              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+              <span className="text-gray-400">—</span>
+              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+            </>
+          )}
+          <button onClick={() => setUseCustomDates(!useCustomDates)}
+            className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:text-indigo-600 border border-gray-300 rounded-md hover:border-indigo-300 transition-colors">
+            <Calendar className="w-4 h-4" />
+            {useCustomDates ? t('dashboard.month') : t('reports.start_date')}
+          </button>
+          <Button variant="secondary" size="sm" onClick={() => handleExport('pdf')}>
+            <FileText className="w-4 h-4 mr-1" />PDF
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => handleExport('csv')}>
+            <FileSpreadsheet className="w-4 h-4 mr-1" />CSV
           </Button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 overflow-x-auto">
         {tabs.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setActiveTab(key)}
-            className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${activeTab === key ? 'bg-white shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors whitespace-nowrap ${activeTab === key ? 'bg-white shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700'}`}
           >
             <Icon className="w-4 h-4" />{label}
           </button>
         ))}
       </div>
 
-      {loading ? <Spinner /> : (
+      {loading ? (
+        <div className="flex justify-center py-20"><Spinner /></div>
+      ) : (
         <>
           {activeTab === 'financial' && <FinancialReport data={data} formatMoney={formatMoney} t={t} />}
           {activeTab === 'shipments' && <ShipmentsReport data={data} t={t} />}

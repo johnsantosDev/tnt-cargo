@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
 import { Modal, Input, Select, Textarea, Button } from '../../components/ui';
+import SearchableSelect from '../../components/ui/SearchableSelect';
 
 export default function ShipmentFormModal({ editId, statuses, onClose, onSaved }) {
   const { t } = useTranslation();
@@ -11,7 +12,7 @@ export default function ShipmentFormModal({ editId, statuses, onClose, onSaved }
   const [form, setForm] = useState({
     client_id: '', origin: 'china', destination: 'Goma', description: '', weight: '', volume: '',
     shipping_cost: '', customs_fee: '', other_fees: '',
-    notes: '', status_id: ''
+    notes: '', status_id: '', estimated_arrival: ''
   });
 
   useEffect(() => {
@@ -33,13 +34,21 @@ export default function ShipmentFormModal({ editId, statuses, onClose, onSaved }
           customs_fee: s.customs_fee || '',
           other_fees: s.other_fees || '',
           notes: s.special_instructions || '',
-          status_id: s.status_id || ''
+          status_id: s.status_id || '',
+          estimated_arrival: s.estimated_arrival?.split('T')[0] || ''
         });
       });
     }
   }, [editId]);
 
   const set = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  const setArrival = (weeks, months = 0) => {
+    const d = new Date();
+    d.setDate(d.getDate() + weeks * 7);
+    d.setMonth(d.getMonth() + months);
+    setForm(prev => ({ ...prev, estimated_arrival: d.toISOString().split('T')[0] }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -62,14 +71,30 @@ export default function ShipmentFormModal({ editId, statuses, onClose, onSaved }
     }
   };
 
+  const arrivalPresets = [
+    { label: '1 sem', weeks: 1 },
+    { label: '2 sem', weeks: 2 },
+    { label: '3 sem', weeks: 3 },
+    { label: '1 mois', weeks: 0, months: 1 },
+    { label: '1m 1s', weeks: 1, months: 1 },
+    { label: '1m 2s', weeks: 2, months: 1 },
+    { label: '1m 3s', weeks: 3, months: 1 },
+    { label: '2 mois', weeks: 0, months: 2 },
+  ];
+
   return (
     <Modal isOpen onClose={onClose} title={editId ? t('shipments.edit') : t('shipments.create')} size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Select label={t('shipments.client')} value={form.client_id} onChange={set('client_id')} error={errors.client_id?.[0]} required>
-            <option value="">{t('common.select')}</option>
-            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </Select>
+          <SearchableSelect
+            label={t('shipments.client')}
+            value={form.client_id}
+            onChange={set('client_id')}
+            options={clients.map(c => ({ value: c.id, label: c.name }))}
+            error={errors.client_id?.[0]}
+            required
+            placeholder={t('common.select')}
+          />
           <Select label={t('shipments.origin')} value={form.origin} onChange={set('origin')} error={errors.origin?.[0]}>
             <option value="china">Chine</option>
             <option value="dubai">Dubaï</option>
@@ -100,6 +125,23 @@ export default function ShipmentFormModal({ editId, statuses, onClose, onSaved }
               {statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </Select>
           )}
+        </div>
+
+        {/* Estimated Arrival with Quick Presets */}
+        <div>
+          <Input label={t('shipments.estimated_arrival')} type="date" value={form.estimated_arrival} onChange={set('estimated_arrival')} error={errors.estimated_arrival?.[0]} />
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {arrivalPresets.map((p, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setArrival(p.weeks, p.months || 0)}
+                className="px-2.5 py-1 text-xs font-medium rounded-full border border-gray-200 text-gray-600 hover:bg-primary-50 hover:text-primary-700 hover:border-primary-200 transition-colors"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

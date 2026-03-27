@@ -8,24 +8,25 @@ import { QRCodeSVG } from 'qrcode.react';
 export default function TrackingPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { trackingNumber } = useParams();
+  const { trackingNumber, shareToken } = useParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [searchInput, setSearchInput] = useState(trackingNumber || '');
 
   useEffect(() => {
-    if (trackingNumber) {
+    if (trackingNumber || shareToken) {
       setLoading(true);
       setError(false);
-      api.get(`/track/${trackingNumber}`)
+      const url = shareToken ? `/track/share/${shareToken}` : `/track/${trackingNumber}`;
+      api.get(url)
         .then(({ data }) => setData(data))
         .catch(() => setError(true))
         .finally(() => setLoading(false));
     } else {
       setLoading(false);
     }
-  }, [trackingNumber]);
+  }, [trackingNumber, shareToken]);
 
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
   const formatTime = (d) => d ? new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';

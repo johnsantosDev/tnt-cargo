@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal } from '../components/ui';
-import { Plus, Search, Edit2, Trash2 } from 'lucide-react';
+import SearchableSelect from '../components/ui/SearchableSelect';
+import { Plus, Search, Edit2, Trash2, Download } from 'lucide-react';
 
 export default function PaymentsPage() {
   const { t } = useTranslation();
@@ -48,11 +49,28 @@ export default function PaymentsPage() {
     { key: 'client', label: t('payments.client'), render: (row) => row.client?.name || '-' },
     { key: 'shipment', label: t('payments.shipment'), render: (row) => row.shipment?.tracking_number || '-' },
     { key: 'amount', label: t('payments.amount'), render: (row) => <span className="font-medium text-green-600">{formatMoney(row.amount)}</span> },
-    { key: 'method', label: t('payments.method'), render: (row) => methodBadge(row.payment_method) },
+    { key: 'method', label: t('payments.method'), render: (row) => methodBadge(row.method) },
     { key: 'date', label: t('payments.date'), render: (row) => formatDate(row.payment_date) },
     {
       key: 'actions', label: '', render: (row) => (
         <div className="flex gap-1">
+          <button
+            onClick={async () => {
+              const res = await api.get(`/payments/${row.id}/pdf`, { responseType: 'blob' });
+              const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+              const link = document.createElement('a');
+              link.href = url;
+              link.setAttribute('download', `recu-${row.reference}.pdf`);
+              document.body.appendChild(link);
+              link.click();
+              link.remove();
+              window.URL.revokeObjectURL(url);
+            }}
+            className="p-1.5 text-gray-400 hover:text-green-600"
+            title="PDF"
+          >
+            <Download className="w-4 h-4" />
+          </button>
           {hasPermission('payments.edit') && <button onClick={() => { setEditData(row); setShowForm(true); }} className="p-1.5 text-gray-400 hover:text-primary-600"><Edit2 className="w-4 h-4" /></button>}
           {hasPermission('payments.delete') && <button onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>}
         </div>
@@ -101,7 +119,7 @@ function PaymentFormModal({ data, onClose, onSaved }) {
   const [shipments, setShipments] = useState([]);
   const [form, setForm] = useState({
     client_id: data?.client_id || '', shipment_id: data?.shipment_id || '',
-    amount: data?.amount || '', payment_method: data?.payment_method || 'cash',
+    amount: data?.amount || '', method: data?.method || 'cash',
     payment_type: data?.payment_type || 'shipment', payment_date: data?.payment_date?.split('T')[0] || new Date().toISOString().split('T')[0],
     notes: data?.notes || ''
   });
@@ -136,17 +154,25 @@ function PaymentFormModal({ data, onClose, onSaved }) {
   return (
     <Modal isOpen onClose={onClose} title={data ? t('payments.edit') : t('payments.create')}>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Select label={t('payments.client')} value={form.client_id} onChange={set('client_id')} error={errors.client_id?.[0]} required>
-          <option value="">{t('common.select')}</option>
-          {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </Select>
-        <Select label={t('payments.shipment')} value={form.shipment_id} onChange={set('shipment_id')} error={errors.shipment_id?.[0]}>
-          <option value="">{t('common.select')}</option>
-          {shipments.map((s) => <option key={s.id} value={s.id}>{s.tracking_number} ({s.description})</option>)}
-        </Select>
+        <SearchableSelect
+          label={t('payments.client')}
+          value={form.client_id}
+          onChange={set('client_id')}
+          options={clients.map(c => ({ value: c.id, label: c.name }))}
+          error={errors.client_id?.[0]}
+          placeholder={t('common.select')}
+        />
+        <SearchableSelect
+          label={t('payments.shipment')}
+          value={form.shipment_id}
+          onChange={set('shipment_id')}
+          options={shipments.map(s => ({ value: s.id, label: `${s.tracking_number} — ${s.destination || ''} ($${Number(s.balance_due || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })})` }))}
+          error={errors.shipment_id?.[0]}
+          placeholder={t('common.select')}
+        />
         <div className="grid grid-cols-2 gap-4">
           <Input label={t('payments.amount')} type="number" step="0.01" value={form.amount} onChange={set('amount')} error={errors.amount?.[0]} required />
-          <Select label={t('payments.method')} value={form.payment_method} onChange={set('payment_method')}>
+          <Select label={t('payments.method')} value={form.method} onChange={set('method')}>
             <option value="cash">Cash</option>
             <option value="mobile_money">Mobile Money</option>
             <option value="bank_transfer">Virement bancaire</option>

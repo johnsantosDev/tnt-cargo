@@ -6,7 +6,7 @@
     "clients": "Clients",
     "payments": "Paiements",
     "expenses": "Dépenses",
-    "cash_advances": "Avances de trésorerie",
+    "cash_advances": "Cash Advance",
     "invoices": "Factures",
     "reports": "Rapports",
     "settings": "Paramètres",
@@ -179,7 +179,7 @@
     "pending": "En attente"
   },
   "cash_advances": {
-    "title": "Avances de trésorerie",
+    "title": "Cash Advance",
     "new": "Nouvelle avance",
     "reference": "Référence",
     "client": "Client",
@@ -344,6 +344,14 @@
     "feature_global_desc": "Présence en Chine, Dubaï et Turquie pour vos imports.",
     "feature_reports": "Rapports détaillés",
     "feature_reports_desc": "Analysez vos opérations avec des rapports financiers complets.",
+    "feature_clients": "Gestion des clients",
+    "feature_clients_desc": "Gérez votre portefeuille clients avec un suivi complet de chaque compte.",
+    "feature_payments": "Suivi des paiements",
+    "feature_payments_desc": "Enregistrez et suivez tous les paiements par cash, mobile money ou virement.",
+    "feature_documents": "Gestion documentaire",
+    "feature_documents_desc": "Centralisez tous vos documents d'expédition : photos, factures, bordereaux.",
+    "feature_invoicing": "Facturation automatique",
+    "feature_invoicing_desc": "Générez des factures et reçus PDF professionnels en un clic.",
     "process_label": "Étapes",
     "process_title": "Comment ça marche ?",
     "process_desc": "Un processus simple et transparent en quatre étapes.",
@@ -442,7 +450,14 @@
       "other": "Autre"
     },
     "location": "Localisation",
-    "location_placeholder": "Ex: Entrepôt Shanghai, Port de Dar es Salaam..."
+    "location_placeholder": "Ex: Entrepôt Shanghai, Port de Dar es Salaam...",
+    "share_tracking": "Lien de suivi",
+    "copy_link": "Copier le lien",
+    "share_message": "Suivez votre expédition ici:",
+    "share_subject": "Suivi de votre expédition",
+    "files": "Fichiers",
+    "drop_files": "Cliquez pour sélectionner des fichiers (images, PDF, documents...)",
+    "document_name_optional": "Nom du document (optionnel)"
   },
   "clients": {
     "title": "Clients",
@@ -519,7 +534,7 @@
     "no_expenses": "Aucune dépense trouvée"
   },
   "cash_advances": {
-    "title": "Avances de trésorerie",
+    "title": "Cash Advance",
     "create": "Nouvelle avance",
     "edit": "Modifier l'avance",
     "new": "Nouvelle avance",

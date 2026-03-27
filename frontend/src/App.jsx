@@ -39,6 +39,7 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/tracking" element={<TrackingPage />} />
           <Route path="/tracking/:trackingNumber" element={<TrackingPage />} />
+          <Route path="/t/:shareToken" element={<TrackingPage />} />
 
           {/* Guest only */}
           <Route element={<GuestRoute />}>
