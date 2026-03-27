@@ -25,12 +25,24 @@ class ReportController extends Controller
         $period = $request->get('period', 'month');
         $end = now()->toDateString();
         $start = match($period) {
-            'week' => now()->subWeek()->toDateString(),
-            'month' => now()->subMonth()->toDateString(),
-            'year' => now()->subYear()->toDateString(),
+            'day', 'daily' => now()->subDays(30)->toDateString(),
+            'week', 'weekly' => now()->subWeeks(12)->toDateString(),
+            'month', 'monthly' => now()->subMonths(12)->toDateString(),
+            'year', 'yearly' => now()->subYears(5)->toDateString(),
             default => now()->subMonth()->toDateString(),
         };
         return [$start, $end];
+    }
+
+    private function getGroupByExpression(Request $request): array
+    {
+        $groupBy = $request->get('group_by', 'daily');
+        return match($groupBy) {
+            'weekly' => ["YEARWEEK(%s, 1) as period, MIN(DATE(%s)) as date", "YEARWEEK(%s, 1)"],
+            'monthly' => ["DATE_FORMAT(%s, '%%Y-%%m') as period, DATE_FORMAT(%s, '%%Y-%%m') as date", "DATE_FORMAT(%s, '%%Y-%%m')"],
+            'yearly' => ["YEAR(%s) as period, YEAR(%s) as date", "YEAR(%s)"],
+            default => ["DATE(%s) as period, DATE(%s) as date", "DATE(%s)"],
+        };
     }
 
     private function exportCsv(array $rows, string $filename)
@@ -81,22 +93,28 @@ class ReportController extends Controller
         $displayRevenue = $revenue > 0 ? $revenue : $totalRevenue;
         $displayExpenses = $expenses > 0 ? $expenses : $totalExpenses;
 
-        // Chart data - group by date
+        // Chart data - group by selected period
         $chartData = [];
+        [$selectExpr, $groupExpr] = $this->getGroupByExpression($request);
+
+        $revenueSelect = sprintf($selectExpr, 'payment_date', 'payment_date');
+        $revenueGroup = sprintf($groupExpr, 'payment_date');
         $revenueByDate = Payment::where('type', 'income')
             ->where('status', 'completed')
-            ->selectRaw("DATE(payment_date) as date, SUM(amount) as total")
-            ->groupBy(DB::raw('DATE(payment_date)'))
+            ->selectRaw("{$revenueSelect}, SUM(amount) as total")
+            ->groupBy(DB::raw($revenueGroup))
             ->orderBy('date')
-            ->limit(30)
+            ->limit(60)
             ->get()
             ->keyBy('date');
 
+        $expenseSelect = sprintf($selectExpr, 'expense_date', 'expense_date');
+        $expenseGroup = sprintf($groupExpr, 'expense_date');
         $expensesByDate = Expense::where('status', 'approved')
-            ->selectRaw("DATE(expense_date) as date, SUM(amount) as total")
-            ->groupBy(DB::raw('DATE(expense_date)'))
+            ->selectRaw("{$expenseSelect}, SUM(amount) as total")
+            ->groupBy(DB::raw($expenseGroup))
             ->orderBy('date')
-            ->limit(30)
+            ->limit(60)
             ->get()
             ->keyBy('date');
 

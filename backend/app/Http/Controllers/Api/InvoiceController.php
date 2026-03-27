@@ -195,10 +195,9 @@ class InvoiceController extends Controller
     public function downloadPdf(Invoice $invoice)
     {
         $invoice->load(['client', 'items', 'shipment']);
-
         $pdf = Pdf::loadView('invoices.pdf', compact('invoice'));
-
-        return $pdf->download("facture-{$invoice->invoice_number}.pdf");
+        $clientName = str_replace(' ', '_', $invoice->client->name ?? 'client');
+        return $pdf->download("facture-{$clientName}-{$invoice->invoice_number}.pdf");
     }
 
     public function destroy(Invoice $invoice): JsonResponse

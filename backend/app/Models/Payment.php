@@ -13,7 +13,7 @@ class Payment extends Model
     protected $fillable = [
         'reference', 'shipment_id', 'client_id', 'amount', 'currency',
         'method', 'type', 'status', 'notes', 'payment_date',
-        'received_by', 'created_by',
+        'received_by', 'created_by', 'bank_reference', 'proof_path', 'proof_type',
     ];
 
     protected function casts(): array

@@ -8,7 +8,7 @@ class CashAdvancePayment extends Model
 {
     protected $fillable = [
         'cash_advance_id', 'amount', 'currency', 'method',
-        'payment_date', 'notes', 'received_by',
+        'payment_date', 'notes', 'received_by', 'evidence_path', 'evidence_type',
     ];
 
     protected function casts(): array

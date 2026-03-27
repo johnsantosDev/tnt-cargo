@@ -14,6 +14,7 @@ export default function ReportsPage() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('financial');
   const [period, setPeriod] = useState('month');
+  const [groupBy, setGroupBy] = useState('daily');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [useCustomDates, setUseCustomDates] = useState(false);
@@ -23,13 +24,13 @@ export default function ReportsPage() {
   const fetchReport = useCallback(() => {
     setLoading(true);
     const params = useCustomDates && startDate && endDate
-      ? { start_date: startDate, end_date: endDate }
-      : { period };
+      ? { start_date: startDate, end_date: endDate, group_by: groupBy }
+      : { period, group_by: groupBy };
     api.get(`/reports/${activeTab}`, { params })
       .then(({ data }) => setData(data))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [activeTab, period, startDate, endDate, useCustomDates]);
+  }, [activeTab, period, groupBy, startDate, endDate, useCustomDates]);
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
@@ -72,6 +73,24 @@ export default function ReportsPage() {
               <option value="month">{t('dashboard.month')}</option>
               <option value="year">{t('dashboard.year')}</option>
             </Select>
+          )}
+          {activeTab === 'financial' && (
+            <div className="flex bg-gray-100 rounded-lg p-0.5">
+              {[
+                { key: 'daily', label: 'Jour' },
+                { key: 'weekly', label: 'Semaine' },
+                { key: 'monthly', label: 'Mois' },
+                { key: 'yearly', label: 'Année' },
+              ].map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setGroupBy(key)}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${groupBy === key ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           )}
           {useCustomDates && (
             <>

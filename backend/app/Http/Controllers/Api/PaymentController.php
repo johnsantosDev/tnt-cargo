@@ -62,7 +62,16 @@ class PaymentController extends Controller
             'status' => 'nullable|in:pending,completed,cancelled,refunded',
             'notes' => 'nullable|string',
             'payment_date' => 'required|date',
+            'bank_reference' => 'nullable|string|max:255',
+            'proof' => 'nullable|file|max:10240|mimes:jpg,jpeg,png,pdf',
         ]);
+
+        if ($request->hasFile('proof')) {
+            $file = $request->file('proof');
+            $validated['proof_path'] = $file->store('payment-proofs', 'public');
+            $validated['proof_type'] = $file->getMimeType();
+            unset($validated['proof']);
+        }
 
         $validated['reference'] = Payment::generateReference();
         $validated['received_by'] = $request->user()->id;
@@ -130,7 +139,24 @@ class PaymentController extends Controller
     {
         $payment->load(['client', 'shipment', 'receiver', 'creator']);
         $pdf = Pdf::loadView('payments.pdf', compact('payment'));
-        return $pdf->download("recu-{$payment->reference}.pdf");
+        $clientName = str_replace(' ', '_', $payment->client->name ?? 'client');
+        return $pdf->download("recu-{$clientName}-{$payment->reference}.pdf");
+    }
+
+    public function downloadProof(Payment $payment)
+    {
+        if (!$payment->proof_path) {
+            return response()->json(['message' => 'Aucune preuve disponible.'], 404);
+        }
+
+        $disk = \Illuminate\Support\Facades\Storage::disk('public');
+        if (!$disk->exists($payment->proof_path)) {
+            return response()->json(['message' => 'Fichier introuvable.'], 404);
+        }
+
+        return $disk->download($payment->proof_path, 'preuve-' . $payment->reference . '.' . pathinfo($payment->proof_path, PATHINFO_EXTENSION), [
+            'Content-Type' => $payment->proof_type ?? 'application/octet-stream',
+        ]);
     }
 
     private function recalculateClientDebt(int $clientId): void

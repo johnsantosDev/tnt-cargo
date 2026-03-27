@@ -95,14 +95,12 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
       <div
         id="sidebar"
         ref={sidebar}
-        className={`flex flex-col fixed z-50 left-0 top-0 lg:static lg:left-auto lg:top-auto h-screen no-scrollbar w-64 sidebar-expanded:!w-64 lg:w-20 2xl:sidebar-expanded:!w-64 shrink-0 bg-white border-r border-gray-200 transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-64 lg:translate-x-0'}`}
+        className={`flex flex-col fixed z-50 left-0 top-0 lg:static lg:left-auto lg:top-auto h-screen no-scrollbar w-64 sidebar-expanded:!w-64 lg:w-20 2xl:sidebar-expanded:!w-64 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-64 lg:translate-x-0'}`}
       >
         {/* Logo */}
         <div className="flex items-center justify-between px-4 h-16 border-b border-gray-100">
           <NavLink to="/dashboard" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center shrink-0">
-              <Package className="w-4 h-4 text-white" />
-            </div>
+            <img src="/favicon.png" alt="TNT Cargo" className="w-8 h-8 rounded-lg shrink-0" />
             <span className="text-base font-bold text-gray-800 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">TNT Cargo</span>
           </NavLink>
         </div>

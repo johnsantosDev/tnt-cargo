@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal } from '../components/ui';
 import SearchableSelect from '../components/ui/SearchableSelect';
-import { Plus, Search, Edit2, Trash2, Download } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Download, Eye } from 'lucide-react';
 
 export default function PaymentsPage() {
   const { t } = useTranslation();
   const { hasPermission } = useAuth();
+  const navigate = useNavigate();
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [meta, setMeta] = useState({});
@@ -45,7 +47,7 @@ export default function PaymentsPage() {
   };
 
   const columns = [
-    { key: 'reference', label: t('payments.reference'), render: (row) => <span className="font-mono text-sm">{row.reference}</span> },
+    { key: 'reference', label: t('payments.reference'), render: (row) => <button onClick={() => navigate(`/dashboard/payments/${row.id}`)} className="font-mono text-sm text-primary-700 hover:text-primary-900 hover:underline">{row.reference}</button> },
     { key: 'client', label: t('payments.client'), render: (row) => row.client?.name || '-' },
     { key: 'shipment', label: t('payments.shipment'), render: (row) => row.shipment?.tracking_number || '-' },
     { key: 'amount', label: t('payments.amount'), render: (row) => <span className="font-medium text-green-600">{formatMoney(row.amount)}</span> },
@@ -54,13 +56,14 @@ export default function PaymentsPage() {
     {
       key: 'actions', label: '', render: (row) => (
         <div className="flex gap-1">
+          <button onClick={() => navigate(`/dashboard/payments/${row.id}`)} className="p-1.5 text-gray-400 hover:text-primary-600"><Eye className="w-4 h-4" /></button>
           <button
             onClick={async () => {
               const res = await api.get(`/payments/${row.id}/pdf`, { responseType: 'blob' });
               const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
               const link = document.createElement('a');
               link.href = url;
-              link.setAttribute('download', `recu-${row.reference}.pdf`);
+              link.setAttribute('download', `recu-${row.client?.name || ''}-${row.reference}.pdf`);
               document.body.appendChild(link);
               link.click();
               link.remove();
@@ -117,11 +120,12 @@ function PaymentFormModal({ data, onClose, onSaved }) {
   const [errors, setErrors] = useState({});
   const [clients, setClients] = useState([]);
   const [shipments, setShipments] = useState([]);
+  const [proofFile, setProofFile] = useState(null);
   const [form, setForm] = useState({
     client_id: data?.client_id || '', shipment_id: data?.shipment_id || '',
     amount: data?.amount || '', method: data?.method || 'cash',
-    payment_type: data?.payment_type || 'shipment', payment_date: data?.payment_date?.split('T')[0] || new Date().toISOString().split('T')[0],
-    notes: data?.notes || ''
+    type: data?.type || 'income', payment_date: data?.payment_date?.split('T')[0] || new Date().toISOString().split('T')[0],
+    notes: data?.notes || '', bank_reference: data?.bank_reference || ''
   });
 
   useEffect(() => {
@@ -143,8 +147,16 @@ function PaymentFormModal({ data, onClose, onSaved }) {
     setLoading(true);
     setErrors({});
     try {
-      if (data?.id) await api.put(`/payments/${data.id}`, form);
-      else await api.post('/payments', form);
+      const formData = new FormData();
+      Object.entries(form).forEach(([key, val]) => { if (val !== '' && val !== null) formData.append(key, val); });
+      if (proofFile) formData.append('proof', proofFile);
+
+      if (data?.id) {
+        formData.append('_method', 'PUT');
+        await api.post(`/payments/${data.id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      } else {
+        await api.post('/payments', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      }
       onSaved();
     } catch (err) {
       if (err.response?.status === 422) setErrors(err.response.data.errors || {});
@@ -163,7 +175,7 @@ function PaymentFormModal({ data, onClose, onSaved }) {
           placeholder={t('common.select')}
         />
         <SearchableSelect
-          label={t('payments.shipment')}
+          label={`${t('payments.shipment')} (Expédition)`}
           value={form.shipment_id}
           onChange={set('shipment_id')}
           options={shipments.map(s => ({ value: s.id, label: `${s.tracking_number} — ${s.destination || ''} ($${Number(s.balance_due || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })})` }))}
@@ -172,7 +184,7 @@ function PaymentFormModal({ data, onClose, onSaved }) {
         />
         <div className="grid grid-cols-2 gap-4">
           <Input label={t('payments.amount')} type="number" step="0.01" value={form.amount} onChange={set('amount')} error={errors.amount?.[0]} required />
-          <Select label={t('payments.method')} value={form.method} onChange={set('method')}>
+          <Select label={t('payments.method')} value={form.method} onChange={set('method')} error={errors.method?.[0]}>
             <option value="cash">Cash</option>
             <option value="mobile_money">Mobile Money</option>
             <option value="bank_transfer">Virement bancaire</option>
@@ -180,12 +192,18 @@ function PaymentFormModal({ data, onClose, onSaved }) {
           </Select>
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <Select label={t('payments.payment_type')} value={form.payment_type} onChange={set('payment_type')}>
-            <option value="shipment">Expédition</option>
-            <option value="advance">Acompte</option>
-            <option value="debt">Remboursement dette</option>
+          <Select label={t('payments.payment_type')} value={form.type} onChange={set('type')} error={errors.type?.[0]}>
+            <option value="income">Revenu</option>
+            <option value="expense">Dépense</option>
+            <option value="refund">Remboursement</option>
           </Select>
           <Input label={t('payments.date')} type="date" value={form.payment_date} onChange={set('payment_date')} />
+        </div>
+        <Input label="Référence bancaire (optionnel)" value={form.bank_reference} onChange={set('bank_reference')} placeholder="Ex: TRF-2026-001" />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Preuve de paiement (optionnel)</label>
+          <input type="file" accept="image/*,.pdf" onChange={(e) => setProofFile(e.target.files[0] || null)} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100" />
+          <p className="mt-1 text-xs text-gray-400">Image ou PDF, max 10 Mo</p>
         </div>
         <Input label={t('common.notes')} value={form.notes} onChange={set('notes')} />
         <div className="flex justify-end gap-3 pt-2">

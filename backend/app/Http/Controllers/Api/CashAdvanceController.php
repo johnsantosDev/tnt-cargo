@@ -107,7 +107,15 @@ class CashAdvanceController extends Controller
             'method' => 'required|in:cash,bank_transfer,mobile_money,check,other',
             'payment_date' => 'required|date',
             'notes' => 'nullable|string',
+            'evidence' => 'nullable|file|max:10240|mimes:jpg,jpeg,png,pdf',
         ]);
+
+        if ($request->hasFile('evidence')) {
+            $file = $request->file('evidence');
+            $validated['evidence_path'] = $file->store('advance-evidence', 'public');
+            $validated['evidence_type'] = $file->getMimeType();
+            unset($validated['evidence']);
+        }
 
         $validated['cash_advance_id'] = $cashAdvance->id;
         $validated['received_by'] = $request->user()->id;
@@ -138,5 +146,21 @@ class CashAdvanceController extends Controller
         $cashAdvance->delete();
 
         return response()->json(['message' => 'Avance supprimée.']);
+    }
+
+    public function downloadEvidence(CashAdvancePayment $payment)
+    {
+        if (!$payment->evidence_path) {
+            return response()->json(['message' => 'Aucune preuve disponible.'], 404);
+        }
+
+        $disk = \Illuminate\Support\Facades\Storage::disk('public');
+        if (!$disk->exists($payment->evidence_path)) {
+            return response()->json(['message' => 'Fichier introuvable.'], 404);
+        }
+
+        return $disk->download($payment->evidence_path, 'preuve-avance.' . pathinfo($payment->evidence_path, PATHINFO_EXTENSION), [
+            'Content-Type' => $payment->evidence_type ?? 'application/octet-stream',
+        ]);
     }
 }

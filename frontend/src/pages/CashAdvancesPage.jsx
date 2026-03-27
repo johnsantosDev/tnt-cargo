@@ -115,7 +115,9 @@ function CashAdvanceFormModal({ data, onClose, onSaved }) {
   const [form, setForm] = useState({
     client_id: data?.client_id || '', supplier_reference: data?.supplier_reference || '',
     amount: data?.amount || '', interest_rate: data?.interest_rate || '0',
-    commission_rate: data?.commission_rate || '0', due_date: data?.due_date?.split('T')[0] || '',
+    commission_rate: data?.commission_rate || '0',
+    issue_date: data?.issue_date?.split('T')[0] || new Date().toISOString().split('T')[0],
+    due_date: data?.due_date?.split('T')[0] || '',
     notes: data?.notes || ''
   });
 
@@ -150,8 +152,9 @@ function CashAdvanceFormModal({ data, onClose, onSaved }) {
           placeholder={t('common.select')}
         />
         <Input label={t('cash_advances.supplier_reference')} value={form.supplier_reference} onChange={set('supplier_reference')} error={errors.supplier_reference?.[0]} required />
+        <Input label={t('cash_advances.amount')} type="number" step="0.01" value={form.amount} onChange={set('amount')} error={errors.amount?.[0]} required />
         <div className="grid grid-cols-2 gap-4">
-          <Input label={t('cash_advances.amount')} type="number" step="0.01" value={form.amount} onChange={set('amount')} error={errors.amount?.[0]} required />
+          <Input label="Date d'émission" type="date" value={form.issue_date} onChange={set('issue_date')} error={errors.issue_date?.[0]} required />
           <Input label={t('cash_advances.due_date')} type="date" value={form.due_date} onChange={set('due_date')} error={errors.due_date?.[0]} required />
         </div>
         <div className="grid grid-cols-2 gap-4">
@@ -168,11 +171,19 @@ function CashAdvanceFormModal({ data, onClose, onSaved }) {
   );
 }
 
-function CashAdvanceDetailModal({ advance, onClose }) {
+function CashAdvanceDetailModal({ advance: initialAdvance, onClose }) {
   const { t } = useTranslation();
+  const [advance, setAdvance] = useState(initialAdvance);
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('fr-FR') : '-';
   const row = (l, v) => <div className="flex justify-between py-2 border-b border-gray-50"><span className="text-sm text-gray-500">{l}</span><span className="text-sm font-medium">{v}</span></div>;
+  const methodLabels = { cash: 'Cash', mobile_money: 'Mobile Money', bank_transfer: 'Virement', check: 'Chèque', other: 'Autre' };
+
+  useEffect(() => {
+    api.get(`/cash-advances/${initialAdvance.id}`)
+      .then(({ data }) => setAdvance(data.data || data))
+      .catch(console.error);
+  }, [initialAdvance.id]);
 
   return (
     <Modal isOpen onClose={onClose} title={advance.reference} size="lg">
@@ -186,16 +197,35 @@ function CashAdvanceDetailModal({ advance, onClose }) {
           {row(t('cash_advances.total_due'), formatMoney(advance.total_due))}
           {row(t('cash_advances.paid'), formatMoney(advance.amount_paid))}
           {row(t('cash_advances.balance'), formatMoney(advance.balance))}
+          {row("Date d'émission", formatDate(advance.issue_date))}
           {row(t('cash_advances.due_date'), formatDate(advance.due_date))}
         </div>
-        {advance.payments && advance.payments.length > 0 && (
+        {(advance.advance_payments || advance.payments || []).length > 0 && (
           <div>
             <h4 className="font-semibold text-sm mb-2">{t('cash_advances.payments_history')}</h4>
             <div className="border rounded-lg divide-y">
-              {advance.payments.map((p) => (
-                <div key={p.id} className="px-4 py-2 flex justify-between">
-                  <span className="text-sm">{formatDate(p.payment_date)}</span>
-                  <span className="text-sm font-medium text-green-600">{formatMoney(p.amount)}</span>
+              {(advance.advance_payments || advance.payments || []).map((p) => (
+                <div key={p.id} className="px-4 py-3">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="text-sm">{formatDate(p.payment_date)}</span>
+                      <span className="ml-2 text-xs px-2 py-0.5 bg-gray-100 rounded-full text-gray-600">{methodLabels[p.method] || p.method}</span>
+                    </div>
+                    <span className="text-sm font-medium text-green-600">{formatMoney(p.amount)}</span>
+                  </div>
+                  {p.notes && <p className="text-xs text-gray-400 mt-1">{p.notes}</p>}
+                  {p.evidence_path && (
+                    <button
+                      onClick={async () => {
+                        const res = await api.get(`/cash-advance-payments/${p.id}/evidence`, { responseType: 'blob' });
+                        const url = URL.createObjectURL(res.data);
+                        window.open(url);
+                      }}
+                      className="mt-1 text-xs text-primary-600 hover:underline flex items-center gap-1"
+                    >
+                      <Eye className="w-3 h-3" />Voir la preuve
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -210,8 +240,9 @@ function AddPaymentModal({ advance, onClose, onSaved }) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [evidenceFile, setEvidenceFile] = useState(null);
   const [form, setForm] = useState({
-    amount: '', payment_method: 'cash',
+    amount: '', method: 'cash',
     payment_date: new Date().toISOString().split('T')[0], notes: ''
   });
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
@@ -222,7 +253,10 @@ function AddPaymentModal({ advance, onClose, onSaved }) {
     setLoading(true);
     setErrors({});
     try {
-      await api.post(`/cash-advances/${advance.id}/payments`, form);
+      const formData = new FormData();
+      Object.entries(form).forEach(([key, val]) => { if (val !== '' && val !== null) formData.append(key, val); });
+      if (evidenceFile) formData.append('evidence', evidenceFile);
+      await api.post(`/cash-advances/${advance.id}/payments`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       onSaved();
     } catch (err) {
       if (err.response?.status === 422) setErrors(err.response.data.errors || {});
@@ -237,12 +271,18 @@ function AddPaymentModal({ advance, onClose, onSaved }) {
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input label={t('cash_advances.payment_amount')} type="number" step="0.01" value={form.amount} onChange={set('amount')} error={errors.amount?.[0]} required />
         <div className="grid grid-cols-2 gap-4">
-          <Select label={t('payments.method')} value={form.payment_method} onChange={set('payment_method')}>
+          <Select label="Mode de paiement" value={form.method} onChange={set('method')} error={errors.method?.[0]}>
             <option value="cash">Cash</option>
             <option value="mobile_money">Mobile Money</option>
             <option value="bank_transfer">Virement</option>
+            <option value="check">Chèque</option>
           </Select>
           <Input label={t('payments.date')} type="date" value={form.payment_date} onChange={set('payment_date')} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Preuve / Justificatif (optionnel)</label>
+          <input type="file" accept="image/*,.pdf" onChange={(e) => setEvidenceFile(e.target.files[0] || null)} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100" />
+          <p className="mt-1 text-xs text-gray-400">Image ou PDF, max 10 Mo</p>
         </div>
         <Input label={t('common.notes')} value={form.notes} onChange={set('notes')} />
         <div className="flex justify-end gap-3 pt-2">

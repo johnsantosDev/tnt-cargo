@@ -42,6 +42,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Payments
     Route::apiResource('payments', PaymentController::class);
     Route::get('/payments/{payment}/pdf', [PaymentController::class, 'downloadPdf']);
+    Route::get('/payments/{payment}/proof', [PaymentController::class, 'downloadProof']);
 
     // Expenses
     Route::apiResource('expenses', ExpenseController::class);
@@ -51,6 +52,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Cash Advances
     Route::apiResource('cash-advances', CashAdvanceController::class);
     Route::post('/cash-advances/{cashAdvance}/payments', [CashAdvanceController::class, 'addPayment']);
+    Route::get('/cash-advance-payments/{payment}/evidence', [CashAdvanceController::class, 'downloadEvidence']);
 
     // Invoices
     Route::apiResource('invoices', InvoiceController::class);

@@ -47,7 +47,7 @@ export default function ShipmentsPage() {
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
 
   const columns = [
-    { key: 'tracking_number', label: t('shipments.tracking_number'), render: (row) => <span className="font-mono text-sm font-medium text-primary-700">{row.tracking_number}</span> },
+    { key: 'tracking_number', label: t('shipments.tracking_number'), render: (row) => <button onClick={() => navigate(`/dashboard/shipments/${row.id}`)} className="font-mono text-sm font-medium text-primary-700 hover:text-primary-900 hover:underline">{row.tracking_number}</button> },
     { key: 'client', label: t('shipments.client'), render: (row) => row.client?.name || '-' },
     { key: 'origin', label: t('shipments.origin'), render: (row) => <span className="capitalize">{row.origin}</span> },
     { key: 'destination', label: t('shipments.destination') },
