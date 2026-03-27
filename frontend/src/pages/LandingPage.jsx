@@ -1,12 +1,34 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Package, Globe, Shield, BarChart3, Search, ArrowRight, Truck,
   MapPin, Clock, CheckCircle, Phone, Mail, Plane, Ship,
   Users, Headphones, Star, ChevronRight, Warehouse, FileCheck,
-  Box, Zap, Eye, CreditCard, FileText, DollarSign, UserCheck
+  Eye, CreditCard, FileText, DollarSign
 } from 'lucide-react';
+
+import LiveChat from '../components/LiveChat';
+
+function useScrollReveal() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { el.classList.add('visible'); observer.unobserve(el); } },
+      { threshold: 0.1 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return ref;
+}
+
+function ScrollReveal({ children, className = '' }) {
+  const ref = useScrollReveal();
+  return <div ref={ref} className={`scroll-reveal ${className}`}>{children}</div>;
+}
 
 export default function LandingPage() {
   const { t, i18n } = useTranslation();
@@ -46,9 +68,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-primary-600 rounded-lg flex items-center justify-center">
-                <Package className="w-5 h-5 text-white" />
-              </div>
+              <img src="/favicon.png" alt="TNT Cargo" className="w-9 h-9 rounded-lg" />
               <span className="text-xl font-bold text-gray-800">TNT Cargo</span>
             </div>
             <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600">
@@ -57,10 +77,10 @@ export default function LandingPage() {
               <a href="#process" className="hover:text-gray-900 transition-colors">{t('landing.nav_process')}</a>
               <a href="#contact" className="hover:text-gray-900 transition-colors">{t('landing.nav_contact')}</a>
             </nav>
-            <Link to="/dashboard/login" className="btn bg-gray-900 text-gray-100 hover:bg-gray-800">
-              {t('landing.login')}
+            <a href="#contact" className="btn bg-gray-900 text-gray-100 hover:bg-gray-800">
+              {t('landing.nav_contact')}
               <ChevronRight className="w-4 h-4" />
-            </Link>
+            </a>
           </div>
         </div>
       </header>
@@ -71,23 +91,23 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-gray-50 via-white to-primary-50/30" />
         <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(0,0,0,0.03) 1px, transparent 0)', backgroundSize: '40px 40px' }} />
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-28 lg:py-32">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20 lg:py-24">
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
             {/* Left: Content */}
             <div>
-              <div className="inline-flex items-center gap-2 bg-primary-50 text-primary-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-6">
+              <div className="inline-flex items-center gap-2 bg-primary-50 text-primary-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-6 animate-fade-in-up">
                 <Plane className="w-3.5 h-3.5" />
                 {t('landing.hero_badge')}
               </div>
-              <h1 className="text-4xl sm:text-5xl lg:text-5xl font-bold text-gray-900 leading-tight mb-6 tracking-tight">
+              <h1 className="text-4xl sm:text-5xl lg:text-5xl font-bold text-gray-900 leading-tight mb-6 tracking-tight animate-fade-in-up delay-100">
                 {t('landing.hero_title')}
               </h1>
-              <p className="text-lg text-gray-500 max-w-lg mb-8 leading-relaxed">
+              <p className="text-lg text-gray-500 max-w-lg mb-8 leading-relaxed animate-fade-in-up delay-200">
                 {t('landing.hero_subtitle')}
               </p>
 
               {/* Tracking Form */}
-              <form onSubmit={handleTrack} className="max-w-lg mb-10">
+              <form onSubmit={handleTrack} className="max-w-lg mb-10 animate-fade-in-up delay-300">
                 <div className="flex rounded-lg shadow-sm border border-gray-200 bg-white overflow-hidden">
                   <div className="flex-1 flex items-center px-4">
                     <Search className="w-4 h-4 text-gray-400 mr-3 shrink-0" />
@@ -107,7 +127,7 @@ export default function LandingPage() {
               </form>
 
               {/* Stats */}
-              <div className="grid grid-cols-4 gap-6">
+              <div className="grid grid-cols-4 gap-6 animate-fade-in-up delay-400">
                 {[
                   { value: '5K+', label: t('landing.stat_shipments') },
                   { value: '500+', label: t('landing.stat_clients') },
@@ -123,7 +143,7 @@ export default function LandingPage() {
             </div>
 
             {/* Right: Visual */}
-            <div className="relative hidden lg:block">
+            <div className="relative hidden lg:block animate-fade-in-right delay-300">
               <div className="relative">
                 {/* Main visual card */}
                 <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 relative z-10">
@@ -192,7 +212,7 @@ export default function LandingPage() {
                 </div>
 
                 {/* Floating elements */}
-                <div className="absolute -top-4 -right-4 bg-white rounded-xl shadow-lg border border-gray-100 p-3 z-20">
+                <div className="absolute -top-4 -right-4 bg-white rounded-xl shadow-lg border border-gray-100 p-3 z-20 animate-float">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
                       <Eye className="w-4 h-4 text-green-600" />
@@ -203,7 +223,7 @@ export default function LandingPage() {
                     </div>
                   </div>
                 </div>
-                <div className="absolute -bottom-3 -left-3 bg-white rounded-xl shadow-lg border border-gray-100 p-3 z-20">
+                <div className="absolute -bottom-3 -left-3 bg-white rounded-xl shadow-lg border border-gray-100 p-3 z-20 animate-float" style={{ animationDelay: '1.5s' }}>
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center">
                       <Shield className="w-4 h-4 text-primary-600" />
@@ -223,11 +243,11 @@ export default function LandingPage() {
       {/* Routes */}
       <section id="routes" className="py-20 bg-white border-t border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-14">
+          <ScrollReveal className="text-center mb-14">
             <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-2">{t('landing.routes_label')}</p>
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">{t('landing.routes_title')}</h2>
             <p className="text-gray-500 mt-3 max-w-lg mx-auto">{t('landing.routes_desc')}</p>
-          </div>
+          </ScrollReveal>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               { from: 'Chine', fromCity: 'Guangzhou', to: 'RDC', cities: 'Goma, Lubumbashi, Kinshasa...', icon: '🇨🇳', flag2: '🇨🇩', transport: Ship, days: '25-35', accent: 'text-red-600', accentBg: 'bg-red-50', accentBorder: 'border-red-100' },
@@ -269,11 +289,11 @@ export default function LandingPage() {
       {/* Features */}
       <section id="features" className="py-20 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-14">
+          <ScrollReveal className="text-center mb-14">
             <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-2">{t('landing.features_label')}</p>
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">{t('landing.features_title')}</h2>
             <p className="text-gray-500 mt-3 max-w-lg mx-auto">{t('landing.features_desc')}</p>
-          </div>
+          </ScrollReveal>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
               { icon: Truck, title: t('landing.feature_tracking'), desc: t('landing.feature_tracking_desc'), color: 'bg-blue-50 text-blue-600' },
@@ -300,11 +320,11 @@ export default function LandingPage() {
       {/* Process */}
       <section id="process" className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-14">
+          <ScrollReveal className="text-center mb-14">
             <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-2">{t('landing.process_label')}</p>
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">{t('landing.process_title')}</h2>
             <p className="text-gray-500 mt-3 max-w-lg mx-auto">{t('landing.process_desc')}</p>
-          </div>
+          </ScrollReveal>
           <div className="relative">
             {/* Connector line */}
             <div className="hidden md:block absolute top-10 left-[12.5%] right-[12.5%] h-px bg-gray-200" />
@@ -332,10 +352,10 @@ export default function LandingPage() {
       {/* Trust / Why Us */}
       <section className="py-20 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-14">
+          <ScrollReveal className="text-center mb-14">
             <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-2">{t('landing.trust_label')}</p>
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">{t('landing.trust_title')}</h2>
-          </div>
+          </ScrollReveal>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               { icon: Headphones, title: t('landing.trust_support'), desc: t('landing.trust_support_desc') },
@@ -364,10 +384,10 @@ export default function LandingPage() {
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">{t('landing.cta_title')}</h2>
           <p className="text-gray-400 text-lg mb-8 max-w-xl mx-auto">{t('landing.cta_desc')}</p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link to="/dashboard/login" className="btn bg-white text-gray-900 hover:bg-gray-100 !px-8 !py-3 font-semibold text-sm">
-              {t('landing.cta_start')}
+            <a href="#contact" className="btn bg-white text-gray-900 hover:bg-gray-100 !px-8 !py-3 font-semibold text-sm">
+              {t('landing.nav_contact')}
               <ArrowRight className="w-4 h-4" />
-            </Link>
+            </a>
             <a href="#routes" className="btn border-gray-700 text-gray-300 hover:border-gray-600 hover:text-white !px-8 !py-3 text-sm">
               {t('landing.cta_routes')}
             </a>
@@ -381,9 +401,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
             <div className="md:col-span-1">
               <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-                  <Package className="w-4 h-4 text-white" />
-                </div>
+                <img src="/favicon.png" alt="TNT Cargo" className="w-8 h-8 rounded-lg" />
                 <span className="text-base font-bold text-white">TNT Cargo</span>
               </div>
               <p className="text-sm leading-relaxed">{t('landing.footer_about')}</p>
@@ -420,10 +438,13 @@ export default function LandingPage() {
         <div className="border-t border-gray-800">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
             <p>&copy; {new Date().getFullYear()} TNT Cargo. {t('landing.rights')}</p>
-            <p className="flex items-center gap-1">{t('landing.made_with')} <span className="text-red-500">&#9829;</span> {t('landing.in_goma')}</p>
+            <p className="flex items-center gap-1">Powered by Primetek Africa</p>
           </div>
         </div>
       </footer>
+
+      {/* Live Chat Widget */}
+      <LiveChat />
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import {
   LayoutDashboard, Package, Users, CreditCard, Receipt,
   Banknote, FileText, BarChart3, Settings, LogOut,
-  Menu, X, Globe, ChevronLeft, ChevronRight
+  Menu, X, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 
@@ -21,7 +21,7 @@ const navItems = [
 ];
 
 export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { user, logout, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
@@ -58,19 +58,6 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
   const handleLogout = async () => {
     await logout();
     navigate('/dashboard/login');
-  };
-
-  const toggleLang = () => {
-    const langs = ['fr', 'en', 'zh'];
-    const current = langs.indexOf(i18n.language);
-    i18n.changeLanguage(langs[(current + 1) % langs.length]);
-  };
-
-  const langLabel = { fr: 'Français', en: 'English', zh: '中文' };
-  const nextLangLabel = () => {
-    const langs = ['fr', 'en', 'zh'];
-    const current = langs.indexOf(i18n.language);
-    return langLabel[langs[(current + 1) % langs.length]];
   };
 
   return (
@@ -133,16 +120,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
         </nav>
 
         {/* Bottom section */}
-        <div className="px-3 py-3 border-t border-gray-100 space-y-1">
-          <button
-            onClick={toggleLang}
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 w-full transition-colors"
-          >
-            <Globe className="w-5 h-5 shrink-0" />
-            <span className="lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200 whitespace-nowrap">
-              {nextLangLabel()}
-            </span>
-          </button>
+        <div className="px-3 py-3 space-y-1">
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 w-full transition-colors"
@@ -156,7 +134,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
 
         {/* User info */}
         {user && (
-          <div className="px-4 py-3 border-t border-gray-100">
+          <div className="px-4 py-3">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center text-sm font-semibold shrink-0">
                 {user.name?.charAt(0)?.toUpperCase()}
@@ -170,7 +148,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
         )}
 
         {/* Expand/collapse toggle */}
-        <div className="py-3 px-3 hidden lg:block 2xl:hidden border-t border-gray-100">
+        <div className="py-3 px-3 hidden lg:block 2xl:hidden">
           <button
             onClick={() => setSidebarExpanded(!sidebarExpanded)}
             className="flex items-center justify-center w-full py-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"

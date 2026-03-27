@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\ShipmentController;
+use App\Http\Controllers\ChatMessageController;
 use Illuminate\Support\Facades\Route;
 
 // Public routes
@@ -17,6 +18,7 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::get('/track/{trackingNumber}', [ShipmentController::class, 'track']);
 Route::get('/track/share/{shareToken}', [ShipmentController::class, 'trackByShareToken']);
 Route::get('/shipment-statuses', [ShipmentController::class, 'statuses']);
+Route::post('/chat-messages', [ChatMessageController::class, 'store']);
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -82,4 +84,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/audit-logs', [SettingsController::class, 'auditLogs']);
         Route::put('/{setting}', [SettingsController::class, 'updateSingle']);
     });
+
+    // Chat messages (admin)
+    Route::get('/chat-messages', [ChatMessageController::class, 'index']);
+    Route::patch('/chat-messages/{chatMessage}/read', [ChatMessageController::class, 'markAsRead']);
 });

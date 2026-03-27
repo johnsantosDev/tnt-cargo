@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal } from '../components/ui';
 import SearchableSelect from '../components/ui/SearchableSelect';
 import { Plus, Search, Edit2, Trash2, Download, Eye } from 'lucide-react';
+import ExportButtons from '../components/ui/ExportButtons';
 
 export default function PaymentsPage() {
   const { t } = useTranslation();
@@ -103,6 +104,9 @@ export default function PaymentsPage() {
       <Card>
         {loading ? <Spinner /> : (
           <>
+            <div className="px-4 py-3 border-b border-gray-100 flex justify-end">
+              <ExportButtons columns={columns} data={payments} filename="paiements" />
+            </div>
             <Table columns={columns} data={payments} emptyMessage={t('payments.no_payments')} />
             {meta.last_page > 1 && <div className="p-4 border-t"><Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} /></div>}
           </>

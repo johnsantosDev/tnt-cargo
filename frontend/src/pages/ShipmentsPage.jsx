@@ -5,6 +5,7 @@ import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardHeader, CardBody, Button, Input, Select, Table, Pagination, StatusBadge, Spinner, Modal, Badge } from '../components/ui';
 import { Plus, Search, Filter, Eye, FileText, Upload, X } from 'lucide-react';
+import ExportButtons from '../components/ui/ExportButtons';
 import ShipmentFormModal from './shipments/ShipmentFormModal';
 
 export default function ShipmentsPage() {
@@ -93,6 +94,9 @@ export default function ShipmentsPage() {
       <Card>
         {loading ? <Spinner /> : (
           <>
+            <div className="px-4 py-3 border-b border-gray-100 flex justify-end">
+              <ExportButtons columns={columns} data={shipments} filename="expeditions" />
+            </div>
             <Table columns={columns} data={shipments} emptyMessage={t('shipments.no_shipments')} />
             {meta.last_page > 1 && <div className="p-4 border-t"><Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} /></div>}
           </>

@@ -181,6 +181,14 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
                           ))}
                         </div>
                       )}
+                      <div className="border-t border-gray-100 mt-1 pt-1 px-3 pb-1">
+                        <button
+                          onClick={() => { navigate(`/dashboard/search?q=${encodeURIComponent(searchQuery)}`); setSearchQuery(''); setSearchResults(null); }}
+                          className="w-full text-center py-2 text-sm font-medium text-primary-600 hover:text-primary-700 hover:bg-gray-50 rounded-lg transition-colors"
+                        >
+                          Voir tous les résultats →
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="p-4 text-center text-sm text-gray-400">Aucun résultat</div>

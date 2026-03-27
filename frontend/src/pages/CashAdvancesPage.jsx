@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Card, CardHeader, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal, Textarea } from '../components/ui';
 import SearchableSelect from '../components/ui/SearchableSelect';
 import { Plus, Search, DollarSign, Edit2, Eye } from 'lucide-react';
+import ExportButtons from '../components/ui/ExportButtons';
 
 export default function CashAdvancesPage() {
   const { t } = useTranslation();
@@ -94,6 +95,9 @@ export default function CashAdvancesPage() {
       <Card>
         {loading ? <Spinner /> : (
           <>
+            <div className="px-4 py-3 border-b border-gray-100 flex justify-end">
+              <ExportButtons columns={columns} data={advances} filename="avances" />
+            </div>
             <Table columns={columns} data={advances} emptyMessage={t('cash_advances.no_advances')} />
             {meta.last_page > 1 && <div className="p-4 border-t"><Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} /></div>}
           </>

@@ -13,6 +13,7 @@ import CashAdvancesPage from './pages/CashAdvancesPage';
 import InvoicesPage from './pages/InvoicesPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
+import SearchPage from './pages/SearchPage';
 import LandingPage from './pages/LandingPage';
 import TrackingPage from './pages/TrackingPage';
 import './i18n';
@@ -61,6 +62,7 @@ export default function App() {
               <Route path="invoices" element={<InvoicesPage />} />
               <Route path="reports" element={<ReportsPage />} />
               <Route path="settings" element={<SettingsPage />} />
+              <Route path="search" element={<SearchPage />} />
             </Route>
           </Route>
 
