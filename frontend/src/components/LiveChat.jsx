@@ -21,7 +21,7 @@ export default function LiveChat() {
     try {
       const res = await fetch('/api/chat-messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify(form),
       });
       if (res.ok) {

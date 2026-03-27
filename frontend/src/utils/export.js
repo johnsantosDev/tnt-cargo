@@ -5,10 +5,23 @@ import { saveAs } from 'file-saver';
 
 export function exportToPDF(columns, data, filename = 'export') {
   const doc = new jsPDF();
-  doc.setFontSize(16);
-  doc.text(filename, 14, 20);
-  doc.setFontSize(10);
-  doc.text(`Exporté le ${new Date().toLocaleDateString('fr-FR')}`, 14, 28);
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  // Header
+  doc.setFontSize(18);
+  doc.setTextColor(30, 64, 175);
+  doc.text('TNT Cargo System', 14, 18);
+  doc.setFontSize(12);
+  doc.setTextColor(100);
+  doc.text(filename, 14, 26);
+  doc.setFontSize(9);
+  doc.text(`Exporté le ${new Date().toLocaleDateString('fr-FR')}`, 14, 32);
+
+  // Separator line
+  doc.setDrawColor(30, 64, 175);
+  doc.setLineWidth(0.5);
+  doc.line(14, 35, pageWidth - 14, 35);
 
   const headers = columns.filter(c => c.key !== 'actions').map(c => c.label);
   const rows = data.map(row =>
@@ -24,9 +37,18 @@ export function exportToPDF(columns, data, filename = 'export') {
   autoTable(doc, {
     head: [headers],
     body: rows,
-    startY: 35,
+    startY: 40,
     styles: { fontSize: 8, cellPadding: 3 },
     headStyles: { fillColor: [30, 64, 175], textColor: 255 },
+    didDrawPage: () => {
+      // Footer on every page
+      doc.setFontSize(9);
+      doc.setTextColor(30, 64, 175);
+      doc.text('TNT Cargo System', pageWidth / 2, pageHeight - 12, { align: 'center' });
+      doc.setFontSize(7);
+      doc.setTextColor(150);
+      doc.text('Logistique internationale — Goma, RDC', pageWidth / 2, pageHeight - 8, { align: 'center' });
+    },
   });
 
   doc.save(`${filename}.pdf`);
