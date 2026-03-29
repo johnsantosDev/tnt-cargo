@@ -42,6 +42,7 @@ export default function CashAdvancesPage() {
     const labels = { pending: 'En cours', partial: 'Partiel', paid: 'Payé', overdue: 'En retard' };
     return <Badge variant={map[status] || 'gray'}>{labels[status] || status}</Badge>;
   };
+  
 
   const columns = [
     { key: 'reference', label: t('cash_advances.reference'), render: (row) => <span className="font-mono text-sm">{row.reference}</span> },

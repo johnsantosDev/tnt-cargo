@@ -31,6 +31,7 @@ class ShipmentController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('tracking_number', 'like', "%{$search}%")
+                  ->orWhere('container_code', 'like', "%{$search}%")
                   ->orWhere('description', 'like', "%{$search}%")
                   ->orWhereHas('client', fn($cq) => $cq->where('name', 'like', "%{$search}%"));
             });
@@ -55,6 +56,7 @@ class ShipmentController extends Controller
     {
         $validated = $request->validate([
             'client_id' => 'required|exists:clients,id',
+            'container_code' => 'nullable|string|max:100',
             'origin' => 'required|in:china,dubai,turkey,other',
             'origin_detail' => 'nullable|string|max:255',
             'destination' => 'nullable|string|max:255',
@@ -122,6 +124,7 @@ class ShipmentController extends Controller
     {
         $validated = $request->validate([
             'client_id' => 'sometimes|exists:clients,id',
+            'container_code' => 'nullable|string|max:100',
             'origin' => 'sometimes|in:china,dubai,turkey,other',
             'origin_detail' => 'nullable|string|max:255',
             'destination' => 'nullable|string|max:255',

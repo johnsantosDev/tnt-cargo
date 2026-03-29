@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardHeader, CardBody, Button, Badge, StatusBadge, Spinner, Modal, Select, Textarea, Input } from '../components/ui';
-import { ArrowLeft, Upload, FileText, Trash2, CheckCircle, Clock, Download, MapPin, Share2, Copy, MessageCircle, Mail, Link2, Image as ImageIcon, Eye, X } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, Trash2, CheckCircle, Clock, Download, MapPin, Share2, Copy, MessageCircle, Mail, Link2, Image as ImageIcon, Eye, X, Box } from 'lucide-react';
 
 export default function ShipmentDetailPage() {
   const { t } = useTranslation();
@@ -22,6 +22,7 @@ export default function ShipmentDetailPage() {
   const [uploadName, setUploadName] = useState('');
   const [docUrls, setDocUrls] = useState({});
   const [previewDoc, setPreviewDoc] = useState(null);
+  const [packingLists, setPackingLists] = useState([]);
 
   const fetch = () => {
     setLoading(true);
@@ -52,6 +53,7 @@ export default function ShipmentDetailPage() {
   useEffect(() => {
     fetch();
     api.get('/shipment-statuses').then(({ data }) => setStatuses(data.data || data)).catch(console.error);
+    api.get(`/shipments/${id}/packing-lists`).then(({ data }) => setPackingLists(data)).catch(console.error);
   }, [id]);
 
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
@@ -81,7 +83,7 @@ export default function ShipmentDetailPage() {
         <button onClick={() => navigate('/dashboard/shipments')} className="p-2 hover:bg-gray-100 rounded-lg"><ArrowLeft className="w-5 h-5" /></button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-900">{shipment.tracking_number}</h1>
-          <p className="text-sm text-gray-500">{shipment.client?.name}</p>
+          <p className="text-sm text-gray-500">{shipment.client?.name}{shipment.container_code ? ` — ${shipment.container_code}` : ''}</p>
         </div>
         <StatusBadge status={shipment.status?.slug} />
         {hasPermission('shipments.edit') && (
@@ -170,6 +172,7 @@ export default function ShipmentDetailPage() {
         <Card>
           <CardHeader><h3 className="font-semibold">{t('shipments.details')}</h3></CardHeader>
           <CardBody>
+            {infoRow(t('shipments.container_code'), shipment.container_code || '-')}
             {infoRow(t('shipments.origin'), shipment.origin)}
             {infoRow(t('shipments.description'), shipment.description)}
             {infoRow(t('shipments.weight'), shipment.weight ? `${shipment.weight} kg` : '-')}
@@ -273,6 +276,74 @@ export default function ShipmentDetailPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Packing Lists */}
+      {packingLists.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Box className="w-5 h-5 text-primary-600" />
+              <h3 className="font-semibold">{t('packing_list.title')}</h3>
+            </div>
+          </CardHeader>
+          <CardBody>
+            {packingLists.map((pl) => (
+              <div key={pl.id} className="mb-6 last:mb-0">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-sm font-medium text-primary-700">{pl.reference}</span>
+                    <Badge color={pl.status === 'draft' ? 'yellow' : pl.status === 'finalized' ? 'blue' : 'green'}>
+                      {t(`packing_list.status_${pl.status}`)}
+                    </Badge>
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    {t('packing_list.total_cbm')}: <span className="font-mono font-medium">{Number(pl.total_cbm || 0).toFixed(4)} m³</span>
+                    <span className="mx-2">|</span>
+                    {t('packing_list.shipping_cost')}: <span className="font-medium text-blue-600">{formatMoney(pl.shipping_cost)}</span>
+                  </div>
+                </div>
+                {pl.items && pl.items.length > 0 && (
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left">{t('packing_list.description')}</th>
+                          <th className="px-3 py-2 text-right">{t('packing_list.qty')}</th>
+                          <th className="px-3 py-2 text-right">{t('packing_list.cbm')}</th>
+                          <th className="px-3 py-2 text-right">{t('packing_list.weight')}</th>
+                          <th className="px-3 py-2 text-right">{t('packing_list.unit_price')}</th>
+                          <th className="px-3 py-2 text-right">{t('packing_list.total')}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {pl.items.map((item) => (
+                          <tr key={item.id}>
+                            <td className="px-3 py-2">{item.description}</td>
+                            <td className="px-3 py-2 text-right">{item.quantity}</td>
+                            <td className="px-3 py-2 text-right font-mono">{Number(item.cbm || 0).toFixed(4)}</td>
+                            <td className="px-3 py-2 text-right">{item.weight ? `${item.weight} kg` : '-'}</td>
+                            <td className="px-3 py-2 text-right">{formatMoney(item.unit_price)}</td>
+                            <td className="px-3 py-2 text-right font-medium">{formatMoney(item.total_price)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-gray-50 font-semibold">
+                        <tr>
+                          <td colSpan="2" className="px-3 py-2 text-right">{t('packing_list.totals')}</td>
+                          <td className="px-3 py-2 text-right font-mono">{Number(pl.total_cbm || 0).toFixed(4)}</td>
+                          <td className="px-3 py-2 text-right">{Number(pl.total_weight || 0).toFixed(2)} kg</td>
+                          <td className="px-3 py-2 text-right"></td>
+                          <td className="px-3 py-2 text-right">{formatMoney(pl.total_amount)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardBody>
+        </Card>
+      )}
 
       {/* Documents */}
       <Card>

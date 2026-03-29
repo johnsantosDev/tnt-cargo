@@ -11,8 +11,10 @@ import PaymentDetailPage from './pages/PaymentDetailPage';
 import ExpensesPage from './pages/ExpensesPage';
 import CashAdvancesPage from './pages/CashAdvancesPage';
 import InvoicesPage from './pages/InvoicesPage';
+import PackingListsPage from './pages/PackingListsPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
+import CurrencyPage from './pages/CurrencyPage';
 import SearchPage from './pages/SearchPage';
 import LandingPage from './pages/LandingPage';
 import TrackingPage from './pages/TrackingPage';
@@ -60,7 +62,9 @@ export default function App() {
               <Route path="expenses" element={<ExpensesPage />} />
               <Route path="cash-advances" element={<CashAdvancesPage />} />
               <Route path="invoices" element={<InvoicesPage />} />
+              <Route path="packing-lists" element={<PackingListsPage />} />
               <Route path="reports" element={<ReportsPage />} />
+              <Route path="currency" element={<CurrencyPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="search" element={<SearchPage />} />
             </Route>

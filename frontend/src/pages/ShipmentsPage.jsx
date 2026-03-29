@@ -49,6 +49,7 @@ export default function ShipmentsPage() {
 
   const columns = [
     { key: 'tracking_number', label: t('shipments.tracking_number'), render: (row) => <button onClick={() => navigate(`/dashboard/shipments/${row.id}`)} className="font-mono text-sm font-medium text-primary-700 hover:text-primary-900 hover:underline">{row.tracking_number}</button> },
+    { key: 'container_code', label: t('shipments.container_code'), render: (row) => row.container_code || '-' },
     { key: 'client', label: t('shipments.client'), render: (row) => row.client?.name || '-' },
     { key: 'origin', label: t('shipments.origin'), render: (row) => <span className="capitalize">{row.origin}</span> },
     { key: 'destination', label: t('shipments.destination') },

@@ -72,3 +72,5 @@ export function exportToExcel(columns, data, filename = 'export') {
   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   saveAs(new Blob([buf], { type: 'application/octet-stream' }), `${filename}.xlsx`);
 }
+
+ 

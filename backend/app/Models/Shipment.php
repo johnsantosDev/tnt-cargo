@@ -20,7 +20,7 @@ class Shipment extends Model
     }
 
     protected $fillable = [
-        'tracking_number', 'share_token', 'client_id', 'status_id', 'origin', 'origin_detail',
+        'tracking_number', 'share_token', 'container_code', 'client_id', 'status_id', 'origin', 'origin_detail',
         'destination', 'description', 'weight', 'volume', 'quantity',
         'package_type', 'declared_value', 'declared_currency',
         'shipping_cost', 'customs_fee', 'warehouse_fee', 'other_fees',

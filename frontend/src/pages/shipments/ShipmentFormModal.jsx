@@ -10,7 +10,7 @@ export default function ShipmentFormModal({ editId, statuses, onClose, onSaved }
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [form, setForm] = useState({
-    client_id: '', origin: 'china', destination: 'Goma', description: '', weight: '', volume: '',
+    client_id: '', container_code: '', origin: 'china', destination: 'Goma', description: '', weight: '', volume: '',
     shipping_cost: '', customs_fee: '', other_fees: '',
     notes: '', status_id: '', estimated_arrival: ''
   });
@@ -25,6 +25,7 @@ export default function ShipmentFormModal({ editId, statuses, onClose, onSaved }
         const s = data.data || data;
         setForm({
           client_id: s.client_id || '',
+          container_code: s.container_code || '',
           origin: s.origin || 'china',
           destination: s.destination || 'Goma',
           description: s.description || '',
@@ -102,6 +103,8 @@ export default function ShipmentFormModal({ editId, statuses, onClose, onSaved }
             <option value="other">Autre</option>
           </Select>
         </div>
+
+        <Input label={t('shipments.container_code')} value={form.container_code} onChange={set('container_code')} error={errors.container_code?.[0]} placeholder="Ex: CNTR-2026-001" />
 
         <Select label={t('shipments.destination')} value={form.destination} onChange={set('destination')} error={errors.destination?.[0]}>
           <option value="Goma">Goma</option>

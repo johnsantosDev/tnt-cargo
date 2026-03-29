@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SettingsController;
+use App\Http\Controllers\Api\PackingListController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\ChatMessageController;
 use Illuminate\Support\Facades\Route;
@@ -60,6 +61,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('invoices', InvoiceController::class);
     Route::post('/invoices/from-shipment/{shipment}', [InvoiceController::class, 'generateFromShipment']);
     Route::get('/invoices/{invoice}/pdf', [InvoiceController::class, 'downloadPdf']);
+
+    // Packing Lists
+    Route::apiResource('packing-lists', PackingListController::class);
+    Route::post('/packing-lists/{packingList}/items', [PackingListController::class, 'addItem']);
+    Route::put('/packing-lists/{packingList}/items/{item}', [PackingListController::class, 'updateItem']);
+    Route::delete('/packing-lists/{packingList}/items/{item}', [PackingListController::class, 'removeItem']);
+    Route::post('/packing-lists/{packingList}/finalize', [PackingListController::class, 'finalize']);
+    Route::post('/packing-lists/{packingList}/invoice', [PackingListController::class, 'generateInvoice']);
+    Route::get('/shipments/{shipment}/packing-lists', [PackingListController::class, 'getByShipment']);
 
     // Reports
     Route::prefix('reports')->group(function () {
