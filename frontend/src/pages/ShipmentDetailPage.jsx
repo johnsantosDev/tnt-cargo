@@ -176,10 +176,10 @@ export default function ShipmentDetailPage() {
             {infoRow(t('shipments.origin'), shipment.origin)}
             {infoRow(t('shipments.description'), shipment.description)}
             {infoRow(t('shipments.weight'), shipment.weight ? `${shipment.weight} kg` : '-')}
-            {infoRow(t('shipments.cbm'), shipment.cbm || '-')}
+            {infoRow(t('shipments.cbm'), shipment.volume ? `${shipment.volume} m³` : '-')}
             {infoRow(t('shipments.warehouse_entry'), formatDate(shipment.warehouse_entry_date))}
-            {infoRow(t('shipments.arrival_date'), formatDate(shipment.arrival_date))}
-            {infoRow(t('shipments.delivery_date'), formatDate(shipment.delivery_date))}
+            {infoRow(t('shipments.estimated_arrival'), formatDate(shipment.estimated_arrival))}
+            {infoRow(t('shipments.actual_arrival'), formatDate(shipment.actual_arrival))}
           </CardBody>
         </Card>
 
@@ -187,12 +187,11 @@ export default function ShipmentDetailPage() {
         <Card>
           <CardHeader><h3 className="font-semibold">{t('shipments.financials')}</h3></CardHeader>
           <CardBody>
-            {infoRow(t('shipments.purchase_price'), formatMoney(shipment.purchase_price))}
-            {infoRow(t('shipments.selling_price'), formatMoney(shipment.selling_price))}
-            {infoRow(t('shipments.shipping_fee'), formatMoney(shipment.shipping_fee))}
-            {infoRow(t('shipments.local_delivery_fee'), formatMoney(shipment.local_delivery_fee))}
+            {infoRow(t('shipments.shipping_cost'), formatMoney(shipment.shipping_cost))}
+            {infoRow(t('shipments.customs_fee'), formatMoney(shipment.customs_fee))}
             {infoRow(t('shipments.warehouse_fee'), formatMoney(shipment.warehouse_fee))}
             {infoRow(t('shipments.other_fees'), formatMoney(shipment.other_fees))}
+            {shipment.insurance_amount > 0 && infoRow(t('shipments.insurance_amount'), formatMoney(shipment.insurance_amount))}
             <div className="flex justify-between py-2 mt-2 border-t-2 border-gray-200">
               <span className="text-sm font-bold text-gray-700">{t('shipments.total_cost')}</span>
               <span className="text-sm font-bold text-gray-900">{formatMoney(shipment.total_cost)}</span>
@@ -203,7 +202,7 @@ export default function ShipmentDetailPage() {
             </div>
             <div className="flex justify-between py-2">
               <span className="text-sm font-bold text-gray-700">{t('shipments.balance')}</span>
-              <span className={`text-sm font-bold ${shipment.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>{formatMoney(shipment.balance)}</span>
+              <span className={`text-sm font-bold ${shipment.balance_due > 0 ? 'text-red-600' : 'text-green-600'}`}>{formatMoney(shipment.balance_due)}</span>
             </div>
           </CardBody>
         </Card>

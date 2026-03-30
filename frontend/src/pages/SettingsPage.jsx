@@ -155,7 +155,7 @@ function UsersSettings() {
         {loading ? <Spinner /> : (
           <>
             <Table columns={columns} data={users} />
-            {meta.last_page > 1 && <div className="p-4 border-t"><Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} /></div>}
+            {meta.last_page > 1 && <div className="p-4 border-t"><Pagination meta={meta} onPageChange={setPage} /></div>}
           </>
         )}
       </Card>
@@ -283,7 +283,7 @@ function AuditLogs() {
       {loading ? <Spinner /> : (
         <>
           <Table columns={columns} data={logs} />
-          {meta.last_page > 1 && <div className="p-4 border-t"><Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} /></div>}
+          {meta.last_page > 1 && <div className="p-4 border-t"><Pagination meta={meta} onPageChange={setPage} /></div>}
         </>
       )}
     </Card>

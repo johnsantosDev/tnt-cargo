@@ -108,7 +108,7 @@ export default function PaymentsPage() {
               <ExportButtons columns={columns} data={payments} filename="paiements" />
             </div>
             <Table columns={columns} data={payments} emptyMessage={t('payments.no_payments')} />
-            {meta.last_page > 1 && <div className="p-4 border-t"><Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} /></div>}
+            {meta.last_page > 1 && <div className="p-4 border-t"><Pagination meta={meta} onPageChange={setPage} /></div>}
           </>
         )}
       </Card>

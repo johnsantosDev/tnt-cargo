@@ -4,7 +4,8 @@ import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardHeader, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal, Textarea } from '../components/ui';
 import SearchableSelect from '../components/ui/SearchableSelect';
-import { Plus, Search, DollarSign, Edit2, Eye } from 'lucide-react';
+import { Plus, Search, DollarSign, Edit2, Eye, Printer } from 'lucide-react';
+import { exportCashAdvanceInvoice } from '../utils/export';
 import ExportButtons from '../components/ui/ExportButtons';
 
 export default function CashAdvancesPage() {
@@ -100,7 +101,7 @@ export default function CashAdvancesPage() {
               <ExportButtons columns={columns} data={advances} filename="avances" />
             </div>
             <Table columns={columns} data={advances} emptyMessage={t('cash_advances.no_advances')} />
-            {meta.last_page > 1 && <div className="p-4 border-t"><Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} /></div>}
+            {meta.last_page > 1 && <div className="p-4 border-t"><Pagination meta={meta} onPageChange={setPage} /></div>}
           </>
         )}
       </Card>
@@ -131,6 +132,8 @@ function CashAdvanceFormModal({ data, onClose, onSaved }) {
   }, []);
 
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
+
+  const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -166,6 +169,21 @@ function CashAdvanceFormModal({ data, onClose, onSaved }) {
           <Input label={t('cash_advances.interest_rate')} type="number" step="0.01" value={form.interest_rate} onChange={set('interest_rate')} />
           <Input label={t('cash_advances.commission_rate')} type="number" step="0.01" value={form.commission_rate} onChange={set('commission_rate')} />
         </div>
+        {Number(form.amount) > 0 && (() => {
+          const amt = Number(form.amount) || 0;
+          const intAmt = amt * (Number(form.interest_rate) || 0) / 100;
+          const comAmt = amt * (Number(form.commission_rate) || 0) / 100;
+          const total = amt + intAmt + comAmt;
+          return (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-1">
+              <p className="text-xs font-semibold text-blue-800 uppercase mb-2">{t('cash_advances.summary_preview')}</p>
+              <div className="flex justify-between text-sm"><span className="text-gray-600">{t('cash_advances.amount_given')}</span><span>{formatMoney(amt)}</span></div>
+              {intAmt > 0 && <div className="flex justify-between text-sm"><span className="text-gray-600">{t('cash_advances.interest_amount')} ({form.interest_rate}%)</span><span>{formatMoney(intAmt)}</span></div>}
+              {comAmt > 0 && <div className="flex justify-between text-sm"><span className="text-gray-600">{t('cash_advances.commission_amount')} ({form.commission_rate}%)</span><span>{formatMoney(comAmt)}</span></div>}
+              <div className="flex justify-between text-sm font-bold border-t border-blue-300 pt-1 mt-1"><span>{t('cash_advances.total_to_repay')}</span><span className="text-blue-800">{formatMoney(total)}</span></div>
+            </div>
+          );
+        })()}
         <Textarea label={t('common.notes')} value={form.notes} onChange={set('notes')} rows={2} />
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
@@ -193,16 +211,32 @@ function CashAdvanceDetailModal({ advance: initialAdvance, onClose }) {
   return (
     <Modal isOpen onClose={onClose} title={advance.reference} size="lg">
       <div className="space-y-4">
+        <div className="flex justify-end">
+          <button
+            onClick={() => exportCashAdvanceInvoice(advance, t)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+          >
+            <Printer className="w-4 h-4" />{t('cash_advances.print_invoice')}
+          </button>
+        </div>
         <div className="space-y-1">
           {row(t('cash_advances.client'), advance.client?.name)}
           {row(t('cash_advances.supplier_reference'), advance.supplier_reference)}
-          {row(t('cash_advances.amount'), formatMoney(advance.amount))}
-          {row(t('cash_advances.interest_rate'), `${advance.interest_rate}%`)}
-          {row(t('cash_advances.commission_rate'), `${advance.commission_rate}%`)}
-          {row(t('cash_advances.total_due'), formatMoney(advance.total_due))}
-          {row(t('cash_advances.paid'), formatMoney(advance.amount_paid))}
-          {row(t('cash_advances.balance'), formatMoney(advance.balance))}
-          {row("Date d'émission", formatDate(advance.issue_date))}
+          {row(t('cash_advances.amount_given'), formatMoney(advance.amount))}
+          {(() => {
+            const intAmt = Number(advance.amount) * Number(advance.interest_rate) / 100;
+            const comAmt = Number(advance.amount) * Number(advance.commission_rate) / 100;
+            return (
+              <>
+                {Number(advance.interest_rate) > 0 && row(t('cash_advances.interest_amount') + ` (${advance.interest_rate}%)`, formatMoney(intAmt))}
+                {Number(advance.commission_rate) > 0 && row(t('cash_advances.commission_amount') + ` (${advance.commission_rate}%)`, formatMoney(comAmt))}
+              </>
+            );
+          })()}
+          {row(t('cash_advances.total_to_repay'), <span className="font-bold text-primary-700">{formatMoney(advance.total_due)}</span>)}
+          {row(t('cash_advances.paid'), formatMoney(advance.total_paid))}
+          {row(t('cash_advances.balance'), <span className={Number(advance.balance) > 0 ? 'text-red-600 font-bold' : 'text-green-600 font-bold'}>{formatMoney(advance.balance)}</span>)}
+          {row(t('cash_advances.issue_date'), formatDate(advance.issue_date))}
           {row(t('cash_advances.due_date'), formatDate(advance.due_date))}
         </div>
         {(advance.advance_payments || advance.payments || []).length > 0 && (

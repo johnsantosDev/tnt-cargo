@@ -182,7 +182,7 @@ class InvoiceController extends Controller
                 'description' => $item['description'],
                 'quantity' => $item['quantity'],
                 'unit_price' => $item['unit_price'],
-                'total' => $item['unit_price'],
+                'total' => $item['quantity'] * $item['unit_price'],
             ]);
         }
 

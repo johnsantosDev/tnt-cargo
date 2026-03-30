@@ -94,6 +94,7 @@
     "warehouse_fee": "仓储费",
     "warehouse_entry": "入库日期",
     "arrival_date": "到达日期",
+    "actual_arrival": "实际到达",
     "delivery_date": "交付日期",
     "other_fees": "其他费用",
     "notes": "备注",
@@ -234,7 +235,16 @@
     "overdue": "已逾期",
     "defaulted": "已违约",
     "search_placeholder": "按参考号、客户搜索...",
-    "no_advances": "未找到预付记录"
+    "no_advances": "未找到预付记录",
+    "amount_given": "预支金额",
+    "interest_amount": "利息",
+    "commission_amount": "佣金",
+    "total_to_repay": "应还总额",
+    "summary_preview": "还款概要",
+    "print_invoice": "打印发票",
+    "invoice_title": "预支发票",
+    "description_col": "描述",
+    "amount_col": "金额"
   },
   "invoices": {
     "title": "发票",

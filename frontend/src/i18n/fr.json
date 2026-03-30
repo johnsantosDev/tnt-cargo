@@ -191,6 +191,7 @@
     "warehouse_fee": "Frais d'entrepôt",
     "warehouse_entry": "Entrée entrepôt",
     "arrival_date": "Date d'arrivée",
+    "actual_arrival": "Arrivée réelle",
     "delivery_date": "Date de livraison",
     "other_fees": "Autres frais",
     "notes": "Notes",
@@ -333,7 +334,16 @@
     "overdue": "En retard",
     "defaulted": "Défaillante",
     "search_placeholder": "Rechercher par référence, client...",
-    "no_advances": "Aucune avance trouvée"
+    "no_advances": "Aucune avance trouvée",
+    "amount_given": "Montant avancé",
+    "interest_amount": "Intérêts",
+    "commission_amount": "Commission",
+    "total_to_repay": "Total à rembourser",
+    "summary_preview": "Aperçu du remboursement",
+    "print_invoice": "Imprimer la facture",
+    "invoice_title": "Facture d'avance de trésorerie",
+    "description_col": "Description",
+    "amount_col": "Montant"
   },
   "invoices": {
     "title": "Factures",

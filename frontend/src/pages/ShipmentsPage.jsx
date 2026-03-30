@@ -55,7 +55,7 @@ export default function ShipmentsPage() {
     { key: 'destination', label: t('shipments.destination') },
     { key: 'description', label: t('shipments.description'), render: (row) => <span className="truncate max-w-[200px] block">{row.description}</span> },
     { key: 'total_cost', label: t('shipments.total_cost'), render: (row) => formatMoney(row.total_cost) },
-    { key: 'balance', label: t('shipments.balance'), render: (row) => <span className={row.balance > 0 ? 'text-red-600 font-medium' : 'text-green-600'}>{formatMoney(row.balance)}</span> },
+    { key: 'balance', label: t('shipments.balance'), render: (row) => <span className={row.balance_due > 0 ? 'text-red-600 font-medium' : 'text-green-600'}>{formatMoney(row.balance_due)}</span> },
     { key: 'status', label: t('shipments.status'), render: (row) => <StatusBadge status={row.status?.slug} /> },
     {
       key: 'actions', label: '', render: (row) => (
@@ -99,7 +99,7 @@ export default function ShipmentsPage() {
               <ExportButtons columns={columns} data={shipments} filename="expeditions" />
             </div>
             <Table columns={columns} data={shipments} emptyMessage={t('shipments.no_shipments')} />
-            {meta.last_page > 1 && <div className="p-4 border-t"><Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} /></div>}
+            {meta.last_page > 1 && <div className="p-4 border-t"><Pagination meta={meta} onPageChange={setPage} /></div>}
           </>
         )}
       </Card>

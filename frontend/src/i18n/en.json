@@ -191,6 +191,7 @@
     "warehouse_fee": "Warehouse Fee",
     "warehouse_entry": "Warehouse Entry",
     "arrival_date": "Arrival Date",
+    "actual_arrival": "Actual Arrival",
     "delivery_date": "Delivery Date",
     "other_fees": "Other Fees",
     "notes": "Notes",
@@ -333,7 +334,16 @@
     "overdue": "Overdue",
     "defaulted": "Defaulted",
     "search_placeholder": "Search by reference, client...",
-    "no_advances": "No advances found"
+    "no_advances": "No advances found",
+    "amount_given": "Amount Given",
+    "interest_amount": "Interest",
+    "commission_amount": "Commission",
+    "total_to_repay": "Total to Repay",
+    "summary_preview": "Repayment Summary",
+    "print_invoice": "Print Invoice",
+    "invoice_title": "Cash Advance Invoice",
+    "description_col": "Description",
+    "amount_col": "Amount"
   },
   "invoices": {
     "title": "Invoices",

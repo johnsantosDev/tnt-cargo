@@ -65,7 +65,7 @@ export default function InvoicesPage() {
       const bal = (row.total || 0) - (row.amount_paid || 0);
       return <span className={bal > 0 ? 'text-red-600 font-medium' : 'text-green-600'}>{formatMoney(bal)}</span>;
     }},
-    { key: 'date', label: t('invoices.date'), render: (row) => formatDate(row.invoice_date) },
+    { key: 'date', label: t('invoices.date'), render: (row) => formatDate(row.issue_date) },
     { key: 'due_date', label: t('invoices.due_date'), render: (row) => formatDate(row.due_date) },
     { key: 'status', label: t('invoices.status'), render: (row) => statusBadge(row.status) },
     {
@@ -113,7 +113,7 @@ export default function InvoicesPage() {
               <ExportButtons columns={columns} data={invoices} filename="factures" />
             </div>
             <Table columns={columns} data={invoices} emptyMessage={t('invoices.no_invoices')} />
-            {meta.last_page > 1 && <div className="p-4 border-t"><Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} /></div>}
+            {meta.last_page > 1 && <div className="p-4 border-t"><Pagination meta={meta} onPageChange={setPage} /></div>}
           </>
         )}
       </Card>
@@ -174,7 +174,7 @@ function InvoiceDetailModal({ invoice, onClose, onDownload }) {
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div><span className="text-gray-500">Client:</span> <span className="font-medium">{invoice.client?.name}</span></div>
-          <div><span className="text-gray-500">Date:</span> <span className="font-medium">{formatDate(invoice.invoice_date)}</span></div>
+          <div><span className="text-gray-500">Date:</span> <span className="font-medium">{formatDate(invoice.issue_date)}</span></div>
           <div><span className="text-gray-500">Échéance:</span> <span className="font-medium">{formatDate(invoice.due_date)}</span></div>
           <div><span className="text-gray-500">Statut:</span> <span className="font-medium">{invoice.status}</span></div>
         </div>
