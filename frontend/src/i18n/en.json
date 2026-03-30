@@ -228,7 +228,11 @@
     "files": "Files",
     "drop_files": "Click to select files (images, PDF, documents...)",
     "document_name_optional": "Document name (optional)",
-    "container_code": "Container Code"
+    "container_code": "Container Code",
+    "cargo_type": "Cargo Type",
+    "cargo_sea": "Sea (Container)",
+    "cargo_air": "Air (Flight)",
+    "flight_reference": "Flight Reference"
   },
   "clients": {
     "title": "Clients",

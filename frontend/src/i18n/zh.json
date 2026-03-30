@@ -129,7 +129,11 @@
     "files": "文件",
     "drop_files": "拖放文件到此处或点击浏览",
     "document_name_optional": "文件名（可选）",
-    "container_code": "集装箱编号"
+    "container_code": "集装箱号",
+    "cargo_type": "货运类型",
+    "cargo_sea": "海运（集装箱）",
+    "cargo_air": "空运（航班）",
+    "flight_reference": "航班号"
   },
   "clients": {
     "title": "客户",

@@ -18,7 +18,7 @@ class PackingListController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = PackingList::with(['client', 'shipment', 'creator'])
+        $query = PackingList::with(['client', 'shipment', 'creator', 'items'])
             ->withCount('items');
 
         if ($request->filled('client_id')) {
@@ -324,7 +324,9 @@ class PackingListController extends Controller
         $validated = $request->validate([
             'origin' => 'required|in:china,dubai,turkey,other',
             'destination' => 'nullable|string|max:255',
+            'cargo_type' => 'required|in:sea,air',
             'container_code' => 'nullable|string|max:100',
+            'flight_reference' => 'nullable|string|max:100',
             'estimated_arrival' => 'nullable|date',
             'special_instructions' => 'nullable|string',
         ]);
@@ -339,7 +341,8 @@ class PackingListController extends Controller
         $shipment = Shipment::create([
             'tracking_number' => Shipment::generateTrackingNumber(),
             'client_id' => $packingList->client_id,
-            'container_code' => $validated['container_code'] ?? null,
+            'package_type' => $validated['cargo_type'],
+            'container_code' => $validated['cargo_type'] === 'sea' ? ($validated['container_code'] ?? null) : ($validated['flight_reference'] ?? null),
             'origin' => $validated['origin'],
             'destination' => $validated['destination'] ?? 'Goma',
             'description' => $description,
@@ -456,7 +459,9 @@ class PackingListController extends Controller
             'packing_list_ids.*' => 'required|integer|exists:packing_lists,id',
             'origin' => 'required|in:china,dubai,turkey,other',
             'destination' => 'nullable|string|max:255',
+            'cargo_type' => 'required|in:sea,air',
             'container_code' => 'nullable|string|max:100',
+            'flight_reference' => 'nullable|string|max:100',
             'estimated_arrival' => 'nullable|date',
             'special_instructions' => 'nullable|string',
         ]);
@@ -498,7 +503,8 @@ class PackingListController extends Controller
         $shipment = Shipment::create([
             'tracking_number' => Shipment::generateTrackingNumber(),
             'client_id' => $clientIds->first(),
-            'container_code' => $validated['container_code'] ?? null,
+            'package_type' => $validated['cargo_type'],
+            'container_code' => $validated['cargo_type'] === 'sea' ? ($validated['container_code'] ?? null) : ($validated['flight_reference'] ?? null),
             'origin' => $validated['origin'],
             'destination' => $validated['destination'] ?? 'Goma',
             'description' => $description,

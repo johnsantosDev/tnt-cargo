@@ -171,10 +171,15 @@ export default function PackingListsPage() {
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <span className="font-mono text-sm font-medium">{row.reference}</span>
+                          {row.items && row.items.length > 0 && (
+                            <div className="text-xs text-gray-400 mt-0.5 truncate max-w-[200px]" title={row.items.map(i => i.description).join(', ')}>
+                              {row.items.map(i => i.description).join(', ')}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-gray-700">{row.client?.name || '-'}</td>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          <span className="font-medium">{row.items_count || 0}</span>
+                          <span className="font-medium">{row.items_count || row.items?.length || 0}</span>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">{Number(row.total_cbm || 0).toFixed(4)} m³</td>
                         <td className="px-4 py-3 whitespace-nowrap">
@@ -212,7 +217,7 @@ export default function PackingListsPage() {
             <span className="font-bold">{selectedPLs.length}</span> liste(s) sélectionnée(s)
             {selectedListsData.length > 0 && (
               <span className="ml-2 text-gray-300">
-                — {selectedListsData.reduce((s, l) => s + (l.items_count || 0), 0)} articles,{' '}
+                — {selectedListsData.reduce((s, l) => s + (l.items_count || l.items?.length || 0), 0)} articles,{' '}
                 {formatMoney(selectedListsData.reduce((s, l) => s + Number(l.total_amount || 0) + Number(l.shipping_cost || 0) + Number(l.additional_fees || 0), 0))}
               </span>
             )}
@@ -367,6 +372,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
     try {
       await api.delete(`/packing-lists/${listId}/items/${itemId}`);
       fetchDetail();
+      onRefresh();
     } catch (err) { console.error(err); }
   };
 
@@ -582,7 +588,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
         <ItemFormModal
           packingListId={listId}
           onClose={() => setShowAddItem(false)}
-          onSaved={() => { setShowAddItem(false); fetchDetail(); }}
+          onSaved={() => { setShowAddItem(false); fetchDetail(); onRefresh(); }}
         />
       )}
       {editItem && (
@@ -590,7 +596,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
           packingListId={listId}
           item={editItem}
           onClose={() => setEditItem(null)}
-          onSaved={() => { setEditItem(null); fetchDetail(); }}
+          onSaved={() => { setEditItem(null); fetchDetail(); onRefresh(); }}
         />
       )}
       {showFinalize && (
@@ -859,7 +865,9 @@ function CreateShipmentModal({ packingList, onClose, onSubmit, loading }) {
   const [form, setForm] = useState({
     origin: 'china',
     destination: 'Goma',
+    cargo_type: 'sea',
     container_code: '',
+    flight_reference: '',
     estimated_arrival: '',
     special_instructions: '',
   });
@@ -869,7 +877,11 @@ function CreateShipmentModal({ packingList, onClose, onSubmit, loading }) {
   const arrivalPresets = [
     { label: '1 sem', weeks: 1 },
     { label: '2 sem', weeks: 2 },
+    { label: '3 sem', weeks: 3 },
     { label: '1 mois', weeks: 0, months: 1 },
+    { label: '1m 1s', weeks: 1, months: 1 },
+    { label: '1m 2s', weeks: 2, months: 1 },
+    { label: '1m 3s', weeks: 3, months: 1 },
     { label: '2 mois', weeks: 0, months: 2 },
   ];
 
@@ -896,12 +908,26 @@ function CreateShipmentModal({ packingList, onClose, onSubmit, loading }) {
             <option value="Goma">Goma</option>
             <option value="Lubumbashi">Lubumbashi</option>
             <option value="Kinshasa">Kinshasa</option>
+            <option value="Beni">Beni</option>
+            <option value="Butembo">Butembo</option>
+            <option value="Bunia">Bunia</option>
             <option value="Bukavu">Bukavu</option>
             <option value="Autre">Autre</option>
           </Select>
         </div>
 
-        <Input label={t('shipments.container_code')} value={form.container_code} onChange={set('container_code')} placeholder="Ex: CNTR-2026-001" />
+        <div>
+          <Select label={t('shipments.cargo_type')} value={form.cargo_type} onChange={set('cargo_type')}>
+            <option value="sea">{t('shipments.cargo_sea')}</option>
+            <option value="air">{t('shipments.cargo_air')}</option>
+          </Select>
+        </div>
+
+        {form.cargo_type === 'sea' ? (
+          <Input label={t('shipments.container_code')} value={form.container_code} onChange={set('container_code')} placeholder="Ex: CNTR-2026-001" />
+        ) : (
+          <Input label={t('shipments.flight_reference')} value={form.flight_reference} onChange={set('flight_reference')} placeholder="Ex: TK-1920" />
+        )}
 
         <div>
           <Input label={t('shipments.estimated_arrival')} type="date" value={form.estimated_arrival} onChange={set('estimated_arrival')} />
@@ -944,7 +970,9 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
   const [form, setForm] = useState({
     origin: 'china',
     destination: 'Goma',
+    cargo_type: 'sea',
     container_code: '',
+    flight_reference: '',
     estimated_arrival: '',
     special_instructions: '',
   });
@@ -962,7 +990,11 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
   const arrivalPresets = [
     { label: '1 sem', weeks: 1 },
     { label: '2 sem', weeks: 2 },
+    { label: '3 sem', weeks: 3 },
     { label: '1 mois', weeks: 0, months: 1 },
+    { label: '1m 1s', weeks: 1, months: 1 },
+    { label: '1m 2s', weeks: 2, months: 1 },
+    { label: '1m 3s', weeks: 3, months: 1 },
     { label: '2 mois', weeks: 0, months: 2 },
   ];
 
@@ -991,6 +1023,7 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
                 <th className="px-2 py-1.5 text-left">{t('packing_list.reference')}</th>
                 <th className="px-2 py-1.5 text-left">{t('packing_list.client')}</th>
                 <th className="px-2 py-1.5 text-right">{t('packing_list.items_count')}</th>
+                <th className="px-2 py-1.5 text-right">{t('packing_list.total_weight')}</th>
                 <th className="px-2 py-1.5 text-right">{t('packing_list.total_cbm')}</th>
                 <th className="px-2 py-1.5 text-right">{t('packing_list.grand_total')}</th>
               </tr>
@@ -998,9 +1031,17 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
             <tbody className="divide-y">
               {packingLists.map(pl => (
                 <tr key={pl.id}>
-                  <td className="px-2 py-1.5 font-mono">{pl.reference}</td>
+                  <td className="px-2 py-1.5">
+                    <div className="font-mono font-medium">{pl.reference}</div>
+                    {pl.items && pl.items.length > 0 && (
+                      <div className="text-[10px] text-gray-400 mt-0.5 max-w-[180px] truncate" title={pl.items.map(i => i.description).join(', ')}>
+                        {pl.items.map(i => i.description).join(', ')}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-2 py-1.5">{pl.client?.name || '-'}</td>
                   <td className="px-2 py-1.5 text-right">{pl.items_count || pl.items?.length || 0}</td>
+                  <td className="px-2 py-1.5 text-right">{Number(pl.total_weight || 0).toFixed(2)} kg</td>
                   <td className="px-2 py-1.5 text-right font-mono">{Number(pl.total_cbm || 0).toFixed(4)}</td>
                   <td className="px-2 py-1.5 text-right">{formatMoney(Number(pl.total_amount || 0) + Number(pl.shipping_cost || 0) + Number(pl.additional_fees || 0))}</td>
                 </tr>
@@ -1020,12 +1061,26 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
             <option value="Goma">Goma</option>
             <option value="Lubumbashi">Lubumbashi</option>
             <option value="Kinshasa">Kinshasa</option>
+            <option value="Beni">Beni</option>
+            <option value="Butembo">Butembo</option>
+            <option value="Bunia">Bunia</option>
             <option value="Bukavu">Bukavu</option>
             <option value="Autre">Autre</option>
           </Select>
         </div>
 
-        <Input label={t('shipments.container_code')} value={form.container_code} onChange={set('container_code')} placeholder="Ex: CNTR-2026-001" />
+        <div>
+          <Select label={t('shipments.cargo_type')} value={form.cargo_type} onChange={set('cargo_type')}>
+            <option value="sea">{t('shipments.cargo_sea')}</option>
+            <option value="air">{t('shipments.cargo_air')}</option>
+          </Select>
+        </div>
+
+        {form.cargo_type === 'sea' ? (
+          <Input label={t('shipments.container_code')} value={form.container_code} onChange={set('container_code')} placeholder="Ex: CNTR-2026-001" />
+        ) : (
+          <Input label={t('shipments.flight_reference')} value={form.flight_reference} onChange={set('flight_reference')} placeholder="Ex: TK-1920" />
+        )}
 
         <div>
           <Input label={t('shipments.estimated_arrival')} type="date" value={form.estimated_arrival} onChange={set('estimated_arrival')} />

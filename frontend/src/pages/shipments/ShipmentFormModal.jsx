@@ -12,7 +12,7 @@ export default function ShipmentFormModal({ editId, statuses, onClose, onSaved }
   const [form, setForm] = useState({
     client_id: '', container_code: '', origin: 'china', destination: 'Goma', description: '', weight: '', volume: '',
     shipping_cost: '', customs_fee: '', other_fees: '',
-    notes: '', status_id: '', estimated_arrival: ''
+    notes: '', status_id: '', estimated_arrival: '', cargo_type: 'sea', flight_reference: ''
   });
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export default function ShipmentFormModal({ editId, statuses, onClose, onSaved }
         const s = data.data || data;
         setForm({
           client_id: s.client_id || '',
-          container_code: s.container_code || '',
+          container_code: s.package_type === 'sea' ? (s.container_code || '') : '',
           origin: s.origin || 'china',
           destination: s.destination || 'Goma',
           description: s.description || '',
@@ -36,7 +36,9 @@ export default function ShipmentFormModal({ editId, statuses, onClose, onSaved }
           other_fees: s.other_fees || '',
           notes: s.special_instructions || '',
           status_id: s.status_id || '',
-          estimated_arrival: s.estimated_arrival?.split('T')[0] || ''
+          estimated_arrival: s.estimated_arrival?.split('T')[0] || '',
+          cargo_type: s.package_type || 'sea',
+          flight_reference: s.package_type === 'air' ? (s.container_code || '') : '',
         });
       });
     }
@@ -56,8 +58,11 @@ export default function ShipmentFormModal({ editId, statuses, onClose, onSaved }
     setLoading(true);
     setErrors({});
     try {
-      const payload = { ...form, special_instructions: form.notes };
+      const payload = { ...form, special_instructions: form.notes, package_type: form.cargo_type };
+      payload.container_code = form.cargo_type === 'sea' ? form.container_code : form.flight_reference;
       delete payload.notes;
+      delete payload.cargo_type;
+      delete payload.flight_reference;
       if (!editId) delete payload.status_id;
       if (editId) {
         await api.put(`/shipments/${editId}`, payload);
@@ -104,7 +109,17 @@ export default function ShipmentFormModal({ editId, statuses, onClose, onSaved }
           </Select>
         </div>
 
-        <Input label={t('shipments.container_code')} value={form.container_code} onChange={set('container_code')} error={errors.container_code?.[0]} placeholder="Ex: CNTR-2026-001" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Select label={t('shipments.cargo_type')} value={form.cargo_type} onChange={set('cargo_type')}>
+            <option value="sea">{t('shipments.cargo_sea')}</option>
+            <option value="air">{t('shipments.cargo_air')}</option>
+          </Select>
+          {form.cargo_type === 'sea' ? (
+            <Input label={t('shipments.container_code')} value={form.container_code} onChange={set('container_code')} error={errors.container_code?.[0]} placeholder="Ex: CNTR-2026-001" />
+          ) : (
+            <Input label={t('shipments.flight_reference')} value={form.flight_reference} onChange={set('flight_reference')} placeholder="Ex: TK-1920" />
+          )}
+        </div>
 
         <Select label={t('shipments.destination')} value={form.destination} onChange={set('destination')} error={errors.destination?.[0]}>
           <option value="Goma">Goma</option>
