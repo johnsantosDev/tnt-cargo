@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Modal, Textarea } from '../components/ui';
-import { Plus, Search, Eye, Package, CheckCircle, FileText, Trash2, Edit3, Box, Settings2 } from 'lucide-react';
+import { Card, CardBody, Button, Input, Select, Pagination, Badge, Modal, Textarea } from '../components/ui';
+import SearchableSelect from '../components/ui/SearchableSelect';
+import { Plus, Search, Eye, Package, CheckCircle, FileText, Trash2, Edit3, Box, Settings2, Truck, DollarSign } from 'lucide-react';
 import ExportButtons from '../components/ui/ExportButtons';
 
 export default function PackingListsPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [lists, setLists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [meta, setMeta] = useState({});
@@ -15,6 +18,9 @@ export default function PackingListsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
+  const [selectedPLs, setSelectedPLs] = useState([]);
+  const [showCreateShipmentFromPLs, setShowCreateShipmentFromPLs] = useState(false);
+  const [shipmentLoading, setShipmentLoading] = useState(false);
 
   const fetchLists = useCallback(() => {
     setLoading(true);
@@ -41,27 +47,46 @@ export default function PackingListsPage() {
     if (!confirm(t('packing_list.confirm_delete'))) return;
     try {
       await api.delete(`/packing-lists/${id}`);
+      setSelectedPLs(prev => prev.filter(plId => plId !== id));
       fetchLists();
     } catch (err) { console.error(err); }
   };
 
-  const columns = [
-    { key: 'reference', label: t('packing_list.reference'), render: (row) => <span className="font-mono text-sm font-medium">{row.reference}</span> },
+  const toggleSelectPL = (id) => {
+    setSelectedPLs(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAll = (checked) => {
+    setSelectedPLs(checked ? lists.map(l => l.id) : []);
+  };
+
+  const handleCreateShipmentFromPLs = async (data) => {
+    setShipmentLoading(true);
+    try {
+      const { data: res } = await api.post('/packing-lists/create-shipment-from-lists', {
+        ...data,
+        packing_list_ids: selectedPLs,
+      });
+      setSelectedPLs([]);
+      setShowCreateShipmentFromPLs(false);
+      fetchLists();
+      navigate(`/dashboard/shipments/${res.shipment.id}`);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error');
+    } finally { setShipmentLoading(false); }
+  };
+
+  const selectedListsData = lists.filter(l => selectedPLs.includes(l.id));
+
+  const exportColumns = [
+    { key: 'reference', label: t('packing_list.reference') },
     { key: 'client', label: t('packing_list.client'), render: (row) => row.client?.name || '-' },
-    { key: 'items_count', label: t('packing_list.items_count'), render: (row) => <span className="font-medium">{row.items_count || 0}</span> },
-    { key: 'total_cbm', label: t('packing_list.total_cbm'), render: (row) => <span>{Number(row.total_cbm || 0).toFixed(4)} m³</span> },
-    { key: 'total_amount', label: t('packing_list.total_amount'), render: (row) => <span className="font-medium">{formatMoney(row.total_amount)}</span> },
-    { key: 'shipping_cost', label: t('packing_list.shipping_cost'), render: (row) => <span className="text-blue-600">{formatMoney(row.shipping_cost)}</span> },
-    { key: 'status', label: t('packing_list.status'), render: (row) => statusBadge(row.status) },
+    { key: 'items_count', label: t('packing_list.items_count') },
+    { key: 'total_cbm', label: t('packing_list.total_cbm'), render: (row) => Number(row.total_cbm || 0).toFixed(4) },
+    { key: 'shipping_cost', label: t('packing_list.shipping_cost'), render: (row) => formatMoney(row.shipping_cost) },
+    { key: 'grand_total', label: t('packing_list.grand_total'), render: (row) => formatMoney(Number(row.total_amount || 0) + Number(row.shipping_cost || 0) + Number(row.additional_fees || 0)) },
+    { key: 'status', label: t('packing_list.status'), render: (row) => row.status },
     { key: 'created_at', label: t('packing_list.date'), render: (row) => formatDate(row.created_at) },
-    {
-      key: 'actions', label: '', render: (row) => (
-        <div className="flex gap-1">
-          <button onClick={() => setShowDetail(row)} className="p-1.5 text-gray-400 hover:text-primary-600"><Eye className="w-4 h-4" /></button>
-          {row.status === 'draft' && <button onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>}
-        </div>
-      )
-    }
   ];
 
   return (
@@ -71,9 +96,16 @@ export default function PackingListsPage() {
           <Box className="w-7 h-7 text-primary-600" />
           <h1 className="text-2xl font-bold text-gray-900">{t('packing_list.title')}</h1>
         </div>
-        <Button onClick={() => setShowCreate(true)}>
-          <Plus className="w-4 h-4 mr-2" />{t('packing_list.create')}
-        </Button>
+        <div className="flex gap-2">
+          {selectedPLs.length > 0 && (
+            <Button variant="outline" onClick={() => setShowCreateShipmentFromPLs(true)}>
+              <Truck className="w-4 h-4 mr-2" />{t('packing_list.create_shipment_selected')} ({selectedPLs.length})
+            </Button>
+          )}
+          <Button onClick={() => setShowCreate(true)}>
+            <Plus className="w-4 h-4 mr-2" />{t('packing_list.create')}
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -98,16 +130,110 @@ export default function PackingListsPage() {
         ) : (
           <>
             <div className="px-4 py-3 border-b border-gray-100 flex justify-end">
-              <ExportButtons columns={columns} data={lists} filename="packing-lists" />
+              <ExportButtons columns={exportColumns} data={lists} filename="packing-lists" />
             </div>
-            <Table columns={columns} data={lists} />
+            <div className="overflow-x-auto">
+              <table className="w-full table-auto">
+                <thead className="text-xs font-semibold uppercase text-gray-500 bg-gray-50 border-t border-b border-gray-100">
+                  <tr>
+                    <th className="px-3 py-3 text-center w-10">
+                      <input
+                        type="checkbox"
+                        checked={lists.length > 0 && selectedPLs.length === lists.length}
+                        onChange={(e) => toggleSelectAll(e.target.checked)}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                    </th>
+                    <th className="px-4 py-3 text-left">{t('packing_list.reference')}</th>
+                    <th className="px-4 py-3 text-left">{t('packing_list.client')}</th>
+                    <th className="px-4 py-3 text-left">{t('packing_list.items_count')}</th>
+                    <th className="px-4 py-3 text-left">{t('packing_list.total_cbm')}</th>
+                    <th className="px-4 py-3 text-left">{t('packing_list.shipping_cost')}</th>
+                    <th className="px-4 py-3 text-left">{t('packing_list.grand_total')}</th>
+                    <th className="px-4 py-3 text-left">{t('packing_list.status')}</th>
+                    <th className="px-4 py-3 text-left">{t('packing_list.date')}</th>
+                    <th className="px-4 py-3 text-left"></th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm divide-y divide-gray-100">
+                  {lists.map((row) => {
+                    const isSelected = selectedPLs.includes(row.id);
+                    const grandTotal = Number(row.total_amount || 0) + Number(row.shipping_cost || 0) + Number(row.additional_fees || 0);
+                    return (
+                      <tr key={row.id} className={`hover:bg-gray-50 transition-colors ${isSelected ? 'bg-primary-50' : ''}`}>
+                        <td className="px-3 py-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectPL(row.id)}
+                            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="font-mono text-sm font-medium">{row.reference}</span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-gray-700">{row.client?.name || '-'}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="font-medium">{row.items_count || 0}</span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">{Number(row.total_cbm || 0).toFixed(4)} m³</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="text-blue-600">{formatMoney(row.shipping_cost)}</span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="font-semibold text-green-700">{formatMoney(grandTotal)}</span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">{statusBadge(row.status)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-gray-700">{formatDate(row.created_at)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex gap-1">
+                            <button onClick={() => setShowDetail(row)} className="p-1.5 text-gray-400 hover:text-primary-600"><Eye className="w-4 h-4" /></button>
+                            {row.status === 'draft' && <button onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {lists.length === 0 && (
+                <div className="py-12 text-center text-gray-400 text-sm">Aucune donnée</div>
+              )}
+            </div>
             {meta.last_page > 1 && <div className="p-4 border-t"><Pagination meta={meta} onPageChange={setPage} /></div>}
           </>
         )}
       </Card>
 
+      {/* Selection summary bar */}
+      {selectedPLs.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white rounded-xl shadow-2xl px-6 py-3 flex items-center gap-4">
+          <span className="text-sm">
+            <span className="font-bold">{selectedPLs.length}</span> liste(s) sélectionnée(s)
+            {selectedListsData.length > 0 && (
+              <span className="ml-2 text-gray-300">
+                — {selectedListsData.reduce((s, l) => s + (l.items_count || 0), 0)} articles,{' '}
+                {formatMoney(selectedListsData.reduce((s, l) => s + Number(l.total_amount || 0) + Number(l.shipping_cost || 0) + Number(l.additional_fees || 0), 0))}
+              </span>
+            )}
+          </span>
+          <Button size="sm" onClick={() => setShowCreateShipmentFromPLs(true)}>
+            <Truck className="w-4 h-4 mr-1" />{t('packing_list.create_shipment_selected')}
+          </Button>
+          <button onClick={() => setSelectedPLs([])} className="text-gray-400 hover:text-white text-xs ml-2">✕</button>
+        </div>
+      )}
+
       {showCreate && <CreatePackingListModal onClose={() => setShowCreate(false)} onSaved={() => { setShowCreate(false); fetchLists(); }} />}
       {showDetail && <PackingListDetailModal listId={showDetail.id} onClose={() => setShowDetail(null)} onRefresh={fetchLists} />}
+      {showCreateShipmentFromPLs && (
+        <CreateShipmentFromPLsModal
+          packingLists={selectedListsData}
+          onClose={() => setShowCreateShipmentFromPLs(false)}
+          onSubmit={handleCreateShipmentFromPLs}
+          loading={shipmentLoading}
+        />
+      )}
     </div>
   );
 }
@@ -117,12 +243,18 @@ function CreatePackingListModal({ onClose, onSaved }) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [clients, setClients] = useState([]);
-  const [form, setForm] = useState({ client_id: '', price_per_cbm: '', notes: '' });
+  const [form, setForm] = useState({ client_id: '', price_per_cbm: '', cbm_count: '', additional_fees: '', fees_description: '', notes: '' });
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
     api.get('/clients', { params: { per_page: 200 } }).then(({ data }) => setClients(data.data)).catch(console.error);
   }, []);
+
+  const pricePerCbm = parseFloat(form.price_per_cbm) || 0;
+  const cbmCount = parseFloat(form.cbm_count) || 0;
+  const shippingCost = pricePerCbm * cbmCount;
+  const additionalFees = parseFloat(form.additional_fees) || 0;
+  const estimatedTotal = shippingCost + additionalFees;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -132,6 +264,9 @@ function CreatePackingListModal({ onClose, onSaved }) {
       await api.post('/packing-lists', {
         client_id: form.client_id,
         price_per_cbm: form.price_per_cbm || 0,
+        cbm_count: form.cbm_count || 0,
+        additional_fees: form.additional_fees || 0,
+        fees_description: form.fees_description || null,
         notes: form.notes || null,
       });
       onSaved();
@@ -140,14 +275,59 @@ function CreatePackingListModal({ onClose, onSaved }) {
     } finally { setLoading(false); }
   };
 
+  const clientOptions = clients.map(c => ({ value: c.id, label: c.name }));
+
   return (
     <Modal isOpen onClose={onClose} title={t('packing_list.create')}>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Select label={t('packing_list.client')} value={form.client_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })} error={errors.client_id?.[0]} required>
-          <option value="">{t('common.select')}</option>
-          {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </Select>
-        <Input label={t('packing_list.price_per_cbm')} type="number" step="0.01" value={form.price_per_cbm} onChange={(e) => setForm({ ...form, price_per_cbm: e.target.value })} error={errors.price_per_cbm?.[0]} />
+        <SearchableSelect
+          label={t('packing_list.client')}
+          value={form.client_id}
+          onChange={(e) => setForm({ ...form, client_id: e.target.value })}
+          options={clientOptions}
+          error={errors.client_id?.[0]}
+          placeholder={t('common.select')}
+        />
+
+        <div className="grid grid-cols-2 gap-3">
+          <Input label={t('packing_list.price_per_cbm') + ' ($)'} type="number" step="0.01" min="0" value={form.price_per_cbm} onChange={(e) => setForm({ ...form, price_per_cbm: e.target.value })} error={errors.price_per_cbm?.[0]} />
+          <Input label={t('packing_list.cbm_count') + ' (m³)'} type="number" step="0.0001" min="0" value={form.cbm_count} onChange={(e) => setForm({ ...form, cbm_count: e.target.value })} />
+        </div>
+
+        {/* Price calculation display */}
+        {pricePerCbm > 0 && cbmCount > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div className="text-xs font-semibold text-blue-800 uppercase mb-1">{t('packing_list.price_calculation')}</div>
+            <div className="text-sm text-blue-900 font-medium">
+              {cbmCount.toFixed(2)} CBM × ${pricePerCbm.toFixed(2)}/CBM = <span className="font-bold">${shippingCost.toFixed(2)}</span>
+            </div>
+          </div>
+        )}
+
+        <Input label={t('packing_list.additional_fees') + ' ($)'} type="number" step="0.01" min="0" value={form.additional_fees} onChange={(e) => setForm({ ...form, additional_fees: e.target.value })} error={errors.additional_fees?.[0]} placeholder="0.00" />
+
+        <Input label={t('packing_list.fees_description')} value={form.fees_description} onChange={(e) => setForm({ ...form, fees_description: e.target.value })} placeholder={t('packing_list.fees_description_placeholder')} />
+
+        {/* Estimated total */}
+        {estimatedTotal > 0 && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">{t('packing_list.shipping_cost')}</span>
+              <span className="font-medium">${shippingCost.toFixed(2)}</span>
+            </div>
+            {additionalFees > 0 && (
+              <div className="flex justify-between text-sm mt-1">
+                <span className="text-gray-600">{t('packing_list.additional_fees')}</span>
+                <span className="font-medium">${additionalFees.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-sm mt-1 pt-1 border-t border-green-200">
+              <span className="font-semibold text-green-800">{t('packing_list.estimated_total')}</span>
+              <span className="font-bold text-green-800">${estimatedTotal.toFixed(2)}</span>
+            </div>
+          </div>
+        )}
+
         <Textarea label={t('packing_list.notes')} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
@@ -167,6 +347,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
   const [editItem, setEditItem] = useState(null);
   const [showFinalize, setShowFinalize] = useState(false);
   const [showEditDetails, setShowEditDetails] = useState(false);
+  const [showCreateShipment, setShowCreateShipment] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
   const fetchDetail = useCallback(() => {
@@ -211,6 +392,19 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
     } finally { setActionLoading(false); }
   };
 
+  const handleCreateShipment = async (data) => {
+    setActionLoading(true);
+    try {
+      const { data: res } = await api.post(`/packing-lists/${listId}/shipment`, data);
+      alert(t('packing_list.shipment_created') + ': ' + res.shipment.tracking_number);
+      fetchDetail();
+      onRefresh();
+      setShowCreateShipment(false);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error');
+    } finally { setActionLoading(false); }
+  };
+
   const handleEditDetails = async (data) => {
     setActionLoading(true);
     try {
@@ -249,11 +443,12 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
         </div>
 
         {/* Financial summary */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <InfoCard label={t('packing_list.items_total')} value={formatMoney(pl.total_amount)} className="text-gray-900 font-semibold" />
           <InfoCard label={t('packing_list.price_per_cbm')} value={formatMoney(pl.price_per_cbm)} />
           <InfoCard label={t('packing_list.shipping_cost')} value={formatMoney(pl.shipping_cost)} className="text-blue-600" />
-          <InfoCard label={t('packing_list.grand_total')} value={formatMoney(Number(pl.total_amount || 0) + Number(pl.shipping_cost || 0))} className="text-green-700 font-bold text-lg" />
+          <InfoCard label={t('packing_list.additional_fees')} value={formatMoney(pl.additional_fees)} className="text-orange-600" />
+          <InfoCard label={t('packing_list.grand_total')} value={formatMoney(Number(pl.total_amount || 0) + Number(pl.shipping_cost || 0) + Number(pl.additional_fees || 0))} className="text-green-700 font-bold text-lg" />
         </div>
 
         {isDraft && (
@@ -264,9 +459,10 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
           </div>
         )}
 
-        {pl.notes && (
-          <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-600">
-            <span className="font-medium">{t('packing_list.notes')}:</span> {pl.notes}
+        {(pl.notes || pl.fees_description) && (
+          <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-600 space-y-1">
+            {pl.fees_description && <div><span className="font-medium">{t('packing_list.fees_description')}:</span> {pl.fees_description}</div>}
+            {pl.notes && <div><span className="font-medium">{t('packing_list.notes')}:</span> {pl.notes}</div>}
           </div>
         )}
 
@@ -276,11 +472,13 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
             <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
               {t('packing_list.items')} ({pl.items?.length || 0})
             </h4>
-            {isDraft && (
-              <Button size="sm" onClick={() => setShowAddItem(true)}>
-                <Plus className="w-3.5 h-3.5 mr-1" />{t('packing_list.add_item')}
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {isDraft && (
+                <Button size="sm" onClick={() => setShowAddItem(true)}>
+                  <Plus className="w-3.5 h-3.5 mr-1" />{t('packing_list.add_item')}
+                </Button>
+              )}
+            </div>
           </div>
 
           {pl.items && pl.items.length > 0 ? (
@@ -290,33 +488,38 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
                   <tr>
                     <th className="px-3 py-2 text-left">{t('packing_list.description')}</th>
                     <th className="px-3 py-2 text-right">{t('packing_list.qty')}</th>
-                    <th className="px-3 py-2 text-right">{t('packing_list.dimensions')}</th>
                     <th className="px-3 py-2 text-right">{t('packing_list.cbm')}</th>
                     <th className="px-3 py-2 text-right">{t('packing_list.weight')}</th>
-                    <th className="px-3 py-2 text-right">{t('packing_list.unit_price')}</th>
                     <th className="px-3 py-2 text-right">{t('packing_list.total')}</th>
+                    <th className="px-3 py-2 text-left">{t('packing_list.cbm_breakdown')}</th>
                     {isDraft && <th className="px-3 py-2 text-right"></th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {pl.items.map((item) => (
+                  {pl.items.map((item) => {
+                    const itemTotalCbm = Number(item.cbm || 0) * Number(item.quantity || 1);
+                    const itemTotal = Number(item.total_price || 0);
+                    const perCbm = itemTotalCbm > 0 ? (itemTotal / itemTotalCbm) : 0;
+                    return (
                     <tr key={item.id} className="hover:bg-gray-50">
                       <td className="px-3 py-2">
                         <div>{item.description}</div>
+                        {item.length && item.width && item.height && <div className="text-xs text-gray-400">{item.length}×{item.width}×{item.height} cm</div>}
                         {item.received_at && <div className="text-xs text-gray-400">{t('packing_list.received')}: {new Date(item.received_at).toLocaleDateString('fr-FR')}</div>}
                         {item.notes && <div className="text-xs text-gray-400">{item.notes}</div>}
                       </td>
                       <td className="px-3 py-2 text-right">{item.quantity}</td>
-                      <td className="px-3 py-2 text-right text-xs text-gray-500">
-                        {item.length && item.width && item.height ? `${item.length}×${item.width}×${item.height} cm` : '-'}
-                      </td>
                       <td className="px-3 py-2 text-right font-mono">
                         {Number(item.cbm || 0).toFixed(4)}
-                        {item.quantity > 1 && <div className="text-xs text-gray-400">× {item.quantity} = {(Number(item.cbm || 0) * item.quantity).toFixed(4)}</div>}
+                        {item.quantity > 1 && <div className="text-xs text-gray-400">× {item.quantity} = {itemTotalCbm.toFixed(4)}</div>}
                       </td>
                       <td className="px-3 py-2 text-right">{item.weight ? `${item.weight} kg` : '-'}</td>
-                      <td className="px-3 py-2 text-right">{formatMoney(item.unit_price)}</td>
-                      <td className="px-3 py-2 text-right font-medium">{formatMoney(item.total_price)}</td>
+                      <td className="px-3 py-2 text-right font-medium">{formatMoney(itemTotal)}</td>
+                      <td className="px-3 py-2 text-left text-xs text-gray-500">
+                        {itemTotalCbm > 0 && itemTotal > 0 && (
+                          <span>{itemTotalCbm.toFixed(2)} CBM × ${perCbm.toFixed(2)}/CBM = ${itemTotal.toFixed(2)}</span>
+                        )}
+                      </td>
                       {isDraft && (
                         <td className="px-3 py-2 text-right">
                           <div className="flex gap-1 justify-end">
@@ -326,15 +529,15 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
                         </td>
                       )}
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
                 <tfoot className="bg-gray-50 font-semibold">
                   <tr>
-                    <td colSpan={isDraft ? 3 : 3} className="px-3 py-2 text-right">{t('packing_list.totals')}</td>
-                    <td className="px-3 py-2 text-right font-mono">{Number(pl.total_cbm || 0).toFixed(4)}</td>
+                    <td className="px-3 py-2 text-right" colSpan={2}>{t('packing_list.totals')}</td>
+                    <td className="px-3 py-2 text-right font-mono">{Number(pl.total_cbm || 0).toFixed(4)} m³</td>
                     <td className="px-3 py-2 text-right">{Number(pl.total_weight || 0).toFixed(2)} kg</td>
-                    <td className="px-3 py-2 text-right"></td>
                     <td className="px-3 py-2 text-right">{formatMoney(pl.total_amount)}</td>
+                    <td></td>
                     {isDraft && <td></td>}
                   </tr>
                 </tfoot>
@@ -349,17 +552,28 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
         </div>
 
         {/* Action buttons */}
-        <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+        <div className="flex flex-wrap justify-end gap-3 pt-2 border-t border-gray-100">
           <Button variant="secondary" onClick={onClose}>{t('common.close')}</Button>
           {isDraft && pl.items?.length > 0 && (
             <Button variant="success" onClick={() => setShowFinalize(true)}>
               <CheckCircle className="w-4 h-4 mr-2" />{t('packing_list.finalize')}
             </Button>
           )}
+          {isFinalized && !pl.shipment_id && (
+            <Button variant="outline" onClick={() => setShowCreateShipment(true)} disabled={actionLoading}>
+              <Truck className="w-4 h-4 mr-2" />{t('packing_list.create_shipment')}
+            </Button>
+          )}
           {isFinalized && (
             <Button onClick={handleGenerateInvoice} disabled={actionLoading}>
               <FileText className="w-4 h-4 mr-2" />{t('packing_list.generate_invoice')}
             </Button>
+          )}
+          {pl.shipment_id && (
+            <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">
+              <Truck className="w-4 h-4" />
+              {t('packing_list.linked_shipment')}: <span className="font-mono font-medium">{pl.shipment?.tracking_number || `#${pl.shipment_id}`}</span>
+            </div>
           )}
         </div>
       </div>
@@ -395,6 +609,14 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
           loading={actionLoading}
         />
       )}
+      {showCreateShipment && (
+        <CreateShipmentModal
+          packingList={pl}
+          onClose={() => setShowCreateShipment(false)}
+          onSubmit={handleCreateShipment}
+          loading={actionLoading}
+        />
+      )}
     </Modal>
   );
 }
@@ -422,7 +644,7 @@ function ItemFormModal({ packingListId, item = null, onClose, onSaved }) {
     width: item?.width || '',
     height: item?.height || '',
     cbm: item?.cbm || '',
-    unit_price: item?.unit_price || '',
+    amount: item ? String(Number(item.total_price || 0)) : '',
     notes: item?.notes || '',
     received_at: item?.received_at ? item.received_at.split('T')[0] : new Date().toISOString().split('T')[0],
   });
@@ -439,18 +661,25 @@ function ItemFormModal({ packingListId, item = null, onClose, onSaved }) {
     }
   }, [form.length, form.width, form.height]);
 
-  const totalPrice = (parseFloat(form.quantity) || 0) * (parseFloat(form.unit_price) || 0);
-  const totalCbm = (parseFloat(form.cbm) || 0) * (parseFloat(form.quantity) || 0);
+  const totalCbm = (parseFloat(form.cbm) || 0) * (parseFloat(form.quantity) || 1);
+  const amount = parseFloat(form.amount) || 0;
+  const pricePerCbmCalc = totalCbm > 0 ? (amount / totalCbm) : 0;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setErrors({});
     try {
+      const qty = parseFloat(form.quantity) || 1;
+      const payload = {
+        ...form,
+        unit_price: qty > 0 ? (amount / qty).toFixed(2) : '0',
+      };
+      delete payload.amount;
       if (item) {
-        await api.put(`/packing-lists/${packingListId}/items/${item.id}`, form);
+        await api.put(`/packing-lists/${packingListId}/items/${item.id}`, payload);
       } else {
-        await api.post(`/packing-lists/${packingListId}/items`, form);
+        await api.post(`/packing-lists/${packingListId}/items`, payload);
       }
       onSaved();
     } catch (err) {
@@ -467,7 +696,7 @@ function ItemFormModal({ packingListId, item = null, onClose, onSaved }) {
 
         <div className="grid grid-cols-2 gap-3">
           <Input label={t('packing_list.qty')} type="number" min="1" value={form.quantity} onChange={set('quantity')} error={errors.quantity?.[0]} required />
-          <Input label={t('packing_list.unit_price') + ' ($)'} type="number" step="0.01" min="0" value={form.unit_price} onChange={set('unit_price')} error={errors.unit_price?.[0]} required />
+          <Input label={t('packing_list.amount') + ' ($)'} type="number" step="0.01" min="0" value={form.amount} onChange={set('amount')} required />
         </div>
 
         <div className="bg-blue-50 rounded-lg p-3">
@@ -486,16 +715,21 @@ function ItemFormModal({ packingListId, item = null, onClose, onSaved }) {
 
         <div className="grid grid-cols-2 gap-3">
           <Input label={t('packing_list.received_at')} type="date" value={form.received_at} onChange={set('received_at')} />
-          <div className="flex items-end">
-            <div className="bg-green-50 rounded-lg px-4 py-2 w-full text-center">
-              <div className="text-xs text-green-600">{t('packing_list.total')}</div>
-              <div className="text-lg font-bold text-green-700">${totalPrice.toFixed(2)}</div>
-              {totalCbm > 0 && <div className="text-xs text-gray-500 mt-1">{t('packing_list.total_cbm')}: {totalCbm.toFixed(4)} m³</div>}
-            </div>
-          </div>
+          <Input label={t('packing_list.item_notes')} value={form.notes} onChange={set('notes')} />
         </div>
 
-        <Input label={t('packing_list.item_notes')} value={form.notes} onChange={set('notes')} />
+        {/* Summary card with CBM price breakdown */}
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="text-xs font-semibold text-green-800 uppercase mb-2">{t('packing_list.price_summary')}</div>
+          <div className="flex justify-between text-sm"><span className="text-gray-600">{t('packing_list.amount')}</span><span className="font-semibold">${amount.toFixed(2)}</span></div>
+          {totalCbm > 0 && amount > 0 && (
+            <div className="mt-2 pt-2 border-t border-green-200 text-sm text-gray-600">
+              <span>{totalCbm.toFixed(4)} CBM × ${pricePerCbmCalc.toFixed(2)}/CBM = </span>
+              <span className="font-bold text-green-800">${amount.toFixed(2)}</span>
+            </div>
+          )}
+          {totalCbm > 0 && <div className="text-xs text-gray-500 mt-1">{t('packing_list.total_cbm')}: {totalCbm.toFixed(4)} m³</div>}
+        </div>
 
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
@@ -521,7 +755,8 @@ function FinalizeModal({ packingList, onClose, onFinalize, loading }) {
 
   const totalCbm = Number(packingList.total_cbm || 0);
   const shippingCost = totalCbm * (parseFloat(pricePerCbm) || 0);
-  const grandTotal = Number(packingList.total_amount || 0) + shippingCost;
+  const additionalFees = Number(packingList.additional_fees || 0);
+  const grandTotal = Number(packingList.total_amount || 0) + shippingCost + additionalFees;
 
   return (
     <Modal isOpen onClose={onClose} title={t('packing_list.finalize')} size="md">
@@ -542,8 +777,9 @@ function FinalizeModal({ packingList, onClose, onFinalize, loading }) {
           onChange={(e) => setPricePerCbm(e.target.value)}
         />
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <InfoCard label={t('packing_list.shipping_cost')} value={`$${shippingCost.toFixed(2)}`} className="text-blue-600 font-semibold" />
+          <InfoCard label={t('packing_list.additional_fees')} value={`$${additionalFees.toFixed(2)}`} className="text-orange-600 font-semibold" />
           <InfoCard label={t('packing_list.grand_total')} value={`$${grandTotal.toFixed(2)}`} className="text-green-700 font-bold text-lg" />
         </div>
 
@@ -572,6 +808,8 @@ function FinalizeModal({ packingList, onClose, onFinalize, loading }) {
 function EditDetailsModal({ packingList, onClose, onSave, loading }) {
   const { t } = useTranslation();
   const [pricePerCbm, setPricePerCbm] = useState(packingList.price_per_cbm || '');
+  const [additionalFees, setAdditionalFees] = useState(packingList.additional_fees || '');
+  const [feesDescription, setFeesDescription] = useState(packingList.fees_description || '');
   const [notes, setNotes] = useState(packingList.notes || '');
 
   return (
@@ -583,6 +821,19 @@ function EditDetailsModal({ packingList, onClose, onSave, loading }) {
           value={pricePerCbm}
           onChange={(e) => setPricePerCbm(e.target.value)}
         />
+        <Input
+          label={t('packing_list.additional_fees') + ' ($)'}
+          type="number" step="0.01" min="0"
+          value={additionalFees}
+          onChange={(e) => setAdditionalFees(e.target.value)}
+          placeholder="0.00"
+        />
+        <Input
+          label={t('packing_list.fees_description')}
+          value={feesDescription}
+          onChange={(e) => setFeesDescription(e.target.value)}
+          placeholder={t('packing_list.fees_description_placeholder')}
+        />
         <Textarea
           label={t('packing_list.notes')}
           value={notes}
@@ -591,10 +842,219 @@ function EditDetailsModal({ packingList, onClose, onSave, loading }) {
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
           <Button
-            onClick={() => onSave({ price_per_cbm: pricePerCbm || 0, notes: notes || null })}
+            onClick={() => onSave({ price_per_cbm: pricePerCbm || 0, additional_fees: additionalFees || 0, fees_description: feesDescription || null, notes: notes || null })}
             disabled={loading}
           >
             {loading ? t('common.saving') : t('common.save')}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// --- Create Shipment Modal ---
+function CreateShipmentModal({ packingList, onClose, onSubmit, loading }) {
+  const { t } = useTranslation();
+  const [form, setForm] = useState({
+    origin: 'china',
+    destination: 'Goma',
+    container_code: '',
+    estimated_arrival: '',
+    special_instructions: '',
+  });
+  const set = (f) => (e) => setForm(prev => ({ ...prev, [f]: e.target.value }));
+  const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
+
+  const arrivalPresets = [
+    { label: '1 sem', weeks: 1 },
+    { label: '2 sem', weeks: 2 },
+    { label: '1 mois', weeks: 0, months: 1 },
+    { label: '2 mois', weeks: 0, months: 2 },
+  ];
+
+  return (
+    <Modal isOpen onClose={onClose} title={t('packing_list.create_shipment')} size="md">
+      <div className="space-y-4">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <p className="text-sm text-blue-800 font-medium mb-2">{t('packing_list.shipment_from_pl')}</p>
+          <div className="grid grid-cols-3 gap-2 text-xs">
+            <div><span className="text-gray-500">{t('packing_list.items_count')}:</span> <span className="font-medium">{packingList.items?.length || 0}</span></div>
+            <div><span className="text-gray-500">{t('packing_list.total_cbm')}:</span> <span className="font-medium">{Number(packingList.total_cbm || 0).toFixed(2)} m³</span></div>
+            <div><span className="text-gray-500">{t('packing_list.grand_total')}:</span> <span className="font-medium">{formatMoney(Number(packingList.total_amount || 0) + Number(packingList.shipping_cost || 0) + Number(packingList.additional_fees || 0))}</span></div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Select label={t('shipments.origin')} value={form.origin} onChange={set('origin')}>
+            <option value="china">Chine</option>
+            <option value="dubai">Dubaï</option>
+            <option value="turkey">Turquie</option>
+            <option value="other">Autre</option>
+          </Select>
+          <Select label={t('shipments.destination')} value={form.destination} onChange={set('destination')}>
+            <option value="Goma">Goma</option>
+            <option value="Lubumbashi">Lubumbashi</option>
+            <option value="Kinshasa">Kinshasa</option>
+            <option value="Bukavu">Bukavu</option>
+            <option value="Autre">Autre</option>
+          </Select>
+        </div>
+
+        <Input label={t('shipments.container_code')} value={form.container_code} onChange={set('container_code')} placeholder="Ex: CNTR-2026-001" />
+
+        <div>
+          <Input label={t('shipments.estimated_arrival')} type="date" value={form.estimated_arrival} onChange={set('estimated_arrival')} />
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {arrivalPresets.map((p, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => {
+                  const d = new Date();
+                  d.setDate(d.getDate() + (p.weeks || 0) * 7);
+                  d.setMonth(d.getMonth() + (p.months || 0));
+                  setForm(prev => ({ ...prev, estimated_arrival: d.toISOString().split('T')[0] }));
+                }}
+                className="px-2.5 py-1 text-xs font-medium rounded-full border border-gray-200 text-gray-600 hover:bg-primary-50 hover:text-primary-700 hover:border-primary-200 transition-colors"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <Textarea label={t('shipments.notes')} value={form.special_instructions} onChange={set('special_instructions')} rows={2} />
+
+        <div className="flex justify-end gap-3 pt-2">
+          <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button onClick={() => onSubmit(form)} disabled={loading}>
+            <Truck className="w-4 h-4 mr-2" />
+            {loading ? t('common.saving') : t('packing_list.create_shipment')}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// --- Create Shipment From Selected Packing Lists Modal ---
+function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }) {
+  const { t } = useTranslation();
+  const [form, setForm] = useState({
+    origin: 'china',
+    destination: 'Goma',
+    container_code: '',
+    estimated_arrival: '',
+    special_instructions: '',
+  });
+  const set = (f) => (e) => setForm(prev => ({ ...prev, [f]: e.target.value }));
+  const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
+
+  const totalCbm = packingLists.reduce((s, pl) => s + Number(pl.total_cbm || 0), 0);
+  const totalWeight = packingLists.reduce((s, pl) => s + Number(pl.total_weight || 0), 0);
+  const totalAmount = packingLists.reduce((s, pl) => s + Number(pl.total_amount || 0), 0);
+  const totalShipping = packingLists.reduce((s, pl) => s + Number(pl.shipping_cost || 0), 0);
+  const totalFees = packingLists.reduce((s, pl) => s + Number(pl.additional_fees || 0), 0);
+  const grandTotal = totalAmount + totalShipping + totalFees;
+  const totalItems = packingLists.reduce((s, pl) => s + Number(pl.items_count || pl.items?.length || 0), 0);
+
+  const arrivalPresets = [
+    { label: '1 sem', weeks: 1 },
+    { label: '2 sem', weeks: 2 },
+    { label: '1 mois', weeks: 0, months: 1 },
+    { label: '2 mois', weeks: 0, months: 2 },
+  ];
+
+  return (
+    <Modal isOpen onClose={onClose} title={t('packing_list.create_shipment_selected')} size="lg">
+      <div className="space-y-4">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <p className="text-sm text-blue-800 font-medium mb-2">{t('packing_list.selected_items_summary')}</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            <div><span className="text-gray-500">{t('packing_list.lists')}:</span> <span className="font-medium">{packingLists.length}</span></div>
+            <div><span className="text-gray-500">{t('packing_list.items_count')}:</span> <span className="font-medium">{totalItems}</span></div>
+            <div><span className="text-gray-500">{t('packing_list.total_cbm')}:</span> <span className="font-medium">{totalCbm.toFixed(4)} m³</span></div>
+            <div><span className="text-gray-500">{t('packing_list.total_weight')}:</span> <span className="font-medium">{totalWeight.toFixed(2)} kg</span></div>
+          </div>
+          <div className="mt-2 pt-2 border-t border-blue-200 grid grid-cols-3 gap-2 text-xs">
+            <div><span className="text-gray-500">{t('packing_list.total_amount')}:</span> <span className="font-medium">{formatMoney(totalAmount)}</span></div>
+            <div><span className="text-gray-500">{t('packing_list.shipping_cost')}:</span> <span className="font-medium">{formatMoney(totalShipping)}</span></div>
+            <div><span className="text-gray-500 font-semibold">{t('packing_list.grand_total')}:</span> <span className="font-bold text-blue-700">{formatMoney(grandTotal)}</span></div>
+          </div>
+        </div>
+
+        <div className="border rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 sticky top-0">
+              <tr>
+                <th className="px-2 py-1.5 text-left">{t('packing_list.reference')}</th>
+                <th className="px-2 py-1.5 text-left">{t('packing_list.client')}</th>
+                <th className="px-2 py-1.5 text-right">{t('packing_list.items_count')}</th>
+                <th className="px-2 py-1.5 text-right">{t('packing_list.total_cbm')}</th>
+                <th className="px-2 py-1.5 text-right">{t('packing_list.grand_total')}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {packingLists.map(pl => (
+                <tr key={pl.id}>
+                  <td className="px-2 py-1.5 font-mono">{pl.reference}</td>
+                  <td className="px-2 py-1.5">{pl.client?.name || '-'}</td>
+                  <td className="px-2 py-1.5 text-right">{pl.items_count || pl.items?.length || 0}</td>
+                  <td className="px-2 py-1.5 text-right font-mono">{Number(pl.total_cbm || 0).toFixed(4)}</td>
+                  <td className="px-2 py-1.5 text-right">{formatMoney(Number(pl.total_amount || 0) + Number(pl.shipping_cost || 0) + Number(pl.additional_fees || 0))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Select label={t('shipments.origin')} value={form.origin} onChange={set('origin')}>
+            <option value="china">Chine</option>
+            <option value="dubai">Dubaï</option>
+            <option value="turkey">Turquie</option>
+            <option value="other">Autre</option>
+          </Select>
+          <Select label={t('shipments.destination')} value={form.destination} onChange={set('destination')}>
+            <option value="Goma">Goma</option>
+            <option value="Lubumbashi">Lubumbashi</option>
+            <option value="Kinshasa">Kinshasa</option>
+            <option value="Bukavu">Bukavu</option>
+            <option value="Autre">Autre</option>
+          </Select>
+        </div>
+
+        <Input label={t('shipments.container_code')} value={form.container_code} onChange={set('container_code')} placeholder="Ex: CNTR-2026-001" />
+
+        <div>
+          <Input label={t('shipments.estimated_arrival')} type="date" value={form.estimated_arrival} onChange={set('estimated_arrival')} />
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {arrivalPresets.map((p, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => {
+                  const d = new Date();
+                  d.setDate(d.getDate() + (p.weeks || 0) * 7);
+                  d.setMonth(d.getMonth() + (p.months || 0));
+                  setForm(prev => ({ ...prev, estimated_arrival: d.toISOString().split('T')[0] }));
+                }}
+                className="px-2.5 py-1 text-xs font-medium rounded-full border border-gray-200 text-gray-600 hover:bg-primary-50 hover:text-primary-700 hover:border-primary-200 transition-colors"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <Textarea label={t('shipments.notes')} value={form.special_instructions} onChange={set('special_instructions')} rows={2} />
+
+        <div className="flex justify-end gap-3 pt-2">
+          <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button onClick={() => onSubmit(form)} disabled={loading}>
+            <Truck className="w-4 h-4 mr-2" />
+            {loading ? t('common.saving') : t('packing_list.create_shipment')}
           </Button>
         </div>
       </div>

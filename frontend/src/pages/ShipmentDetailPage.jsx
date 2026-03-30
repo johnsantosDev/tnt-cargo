@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardHeader, CardBody, Button, Badge, StatusBadge, Spinner, Modal, Select, Textarea, Input } from '../components/ui';
-import { ArrowLeft, Upload, FileText, Trash2, CheckCircle, Clock, Download, MapPin, Share2, Copy, MessageCircle, Mail, Link2, Image as ImageIcon, Eye, X, Box } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, Trash2, CheckCircle, Clock, Download, MapPin, Share2, Copy, MessageCircle, Mail, Link2, Image as ImageIcon, Eye, X, Box, DollarSign } from 'lucide-react';
 
 export default function ShipmentDetailPage() {
   const { t } = useTranslation();
@@ -23,6 +23,7 @@ export default function ShipmentDetailPage() {
   const [docUrls, setDocUrls] = useState({});
   const [previewDoc, setPreviewDoc] = useState(null);
   const [packingLists, setPackingLists] = useState([]);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   const fetch = () => {
     setLoading(true);
@@ -185,7 +186,16 @@ export default function ShipmentDetailPage() {
 
         {/* Financials */}
         <Card>
-          <CardHeader><h3 className="font-semibold">{t('shipments.financials')}</h3></CardHeader>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">{t('shipments.financials')}</h3>
+              {shipment.balance_due > 0 && (
+                <Button size="sm" onClick={() => setShowPaymentModal(true)}>
+                  <DollarSign className="w-3.5 h-3.5 mr-1" />{t('payments.record_payment')}
+                </Button>
+              )}
+            </div>
+          </CardHeader>
           <CardBody>
             {infoRow(t('shipments.shipping_cost'), formatMoney(shipment.shipping_cost))}
             {infoRow(t('shipments.customs_fee'), formatMoney(shipment.customs_fee))}
@@ -527,6 +537,123 @@ export default function ShipmentDetailPage() {
           </div>
         </div>
       </Modal>
+
+      {showPaymentModal && shipment && (
+        <RecordPaymentModal
+          shipment={shipment}
+          onClose={() => setShowPaymentModal(false)}
+          onSaved={() => { setShowPaymentModal(false); fetch(); }}
+        />
+      )}
     </div>
+  );
+}
+
+// --- Record Payment Modal (inline, pre-filled with shipment data) ---
+function RecordPaymentModal({ shipment, onClose, onSaved }) {
+  const { t } = useTranslation();
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [proofFile, setProofFile] = useState(null);
+  const [form, setForm] = useState({
+    client_id: shipment.client_id || '',
+    shipment_id: shipment.id,
+    amount: '',
+    method: 'cash',
+    type: 'income',
+    payment_date: new Date().toISOString().split('T')[0],
+    notes: '',
+    bank_reference: '',
+  });
+
+  const set = (f) => (e) => setForm(p => ({ ...p, [f]: e.target.value }));
+  const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrors({});
+    try {
+      const formData = new FormData();
+      Object.entries(form).forEach(([key, val]) => { if (val !== '' && val !== null) formData.append(key, val); });
+      if (proofFile) formData.append('proof', proofFile);
+      await api.post('/payments', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      onSaved();
+    } catch (err) {
+      if (err.response?.status === 422) setErrors(err.response.data.errors || {});
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title={t('payments.record_payment')} size="md">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Shipment summary */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div><span className="text-gray-500">{t('shipments.tracking')}:</span> <span className="font-mono font-medium">{shipment.tracking_number}</span></div>
+            <div><span className="text-gray-500">{t('payments.client')}:</span> <span className="font-medium">{shipment.client?.name}</span></div>
+            <div><span className="text-gray-500">{t('shipments.total_cost')}:</span> <span className="font-medium">{formatMoney(shipment.total_cost)}</span></div>
+            <div><span className="text-gray-500">{t('shipments.balance')}:</span> <span className="font-bold text-red-600">{formatMoney(shipment.balance_due)}</span></div>
+          </div>
+        </div>
+
+        <Input
+          label={t('payments.amount') + ' ($)'}
+          type="number"
+          step="0.01"
+          min="0"
+          value={form.amount}
+          onChange={set('amount')}
+          error={errors.amount?.[0]}
+          required
+          placeholder={Number(shipment.balance_due || 0).toFixed(2)}
+        />
+
+        <div className="flex gap-2 flex-wrap">
+          {[
+            { label: '25%', factor: 0.25 },
+            { label: '50%', factor: 0.5 },
+            { label: '75%', factor: 0.75 },
+            { label: '100%', factor: 1 },
+          ].map(p => (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => setForm(prev => ({ ...prev, amount: (Number(shipment.balance_due || 0) * p.factor).toFixed(2) }))}
+              className="px-3 py-1 text-xs font-medium rounded-full border border-gray-200 text-gray-600 hover:bg-primary-50 hover:text-primary-700 hover:border-primary-200 transition-colors"
+            >
+              {p.label} ({formatMoney(Number(shipment.balance_due || 0) * p.factor)})
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Select label={t('payments.method')} value={form.method} onChange={set('method')} error={errors.method?.[0]}>
+            <option value="cash">Cash</option>
+            <option value="mobile_money">Mobile Money</option>
+            <option value="bank_transfer">Virement bancaire</option>
+            <option value="check">Chèque</option>
+          </Select>
+          <Input label={t('payments.date')} type="date" value={form.payment_date} onChange={set('payment_date')} />
+        </div>
+
+        <Input label="Référence bancaire (optionnel)" value={form.bank_reference} onChange={set('bank_reference')} placeholder="Ex: TRF-2026-001" />
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Preuve de paiement (optionnel)</label>
+          <input type="file" accept="image/*,.pdf" onChange={(e) => setProofFile(e.target.files[0] || null)} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100" />
+        </div>
+
+        <Input label={t('common.notes')} value={form.notes} onChange={set('notes')} />
+
+        <div className="flex justify-end gap-3 pt-2">
+          <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button type="submit" disabled={loading}>
+            <DollarSign className="w-4 h-4 mr-1" />
+            {loading ? t('common.saving') : t('payments.record_payment')}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }

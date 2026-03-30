@@ -69,6 +69,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/packing-lists/{packingList}/items/{item}', [PackingListController::class, 'removeItem']);
     Route::post('/packing-lists/{packingList}/finalize', [PackingListController::class, 'finalize']);
     Route::post('/packing-lists/{packingList}/invoice', [PackingListController::class, 'generateInvoice']);
+    Route::post('/packing-lists/{packingList}/shipment', [PackingListController::class, 'createShipment']);
+    Route::post('/packing-lists/{packingList}/shipment-from-items', [PackingListController::class, 'createShipmentFromItems']);
+    Route::post('/packing-lists/create-shipment-from-lists', [PackingListController::class, 'createShipmentFromLists']);
     Route::get('/shipments/{shipment}/packing-lists', [PackingListController::class, 'getByShipment']);
 
     // Reports

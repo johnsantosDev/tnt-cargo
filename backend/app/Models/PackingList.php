@@ -13,7 +13,7 @@ class PackingList extends Model
     protected $fillable = [
         'reference', 'client_id', 'shipment_id', 'status',
         'total_cbm', 'total_weight', 'total_amount',
-        'price_per_cbm', 'shipping_cost',
+        'price_per_cbm', 'shipping_cost', 'additional_fees', 'fees_description',
         'notes', 'created_by', 'finalized_at',
     ];
 
@@ -25,6 +25,7 @@ class PackingList extends Model
             'total_amount' => 'decimal:2',
             'price_per_cbm' => 'decimal:2',
             'shipping_cost' => 'decimal:2',
+            'additional_fees' => 'decimal:2',
             'finalized_at' => 'date',
         ];
     }

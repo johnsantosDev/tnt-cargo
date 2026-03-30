@@ -282,7 +282,8 @@
     "pending": "Pending",
     "cancelled": "Cancelled",
     "search_placeholder": "Search by reference, client...",
-    "no_payments": "No payments found"
+    "no_payments": "No payments found",
+    "record_payment": "Record Payment"
   },
   "expenses": {
     "title": "Expenses",
@@ -539,6 +540,23 @@
     "confirm_delete": "Are you sure you want to delete this packing list?",
     "edit_details": "Edit Details",
     "link_shipment": "Link to Shipment (optional)",
-    "no_shipment": "No shipment linked"
+    "no_shipment": "No shipment linked",
+    "amount": "Amount",
+    "price_summary": "Price Summary",
+    "cbm_breakdown": "CBM Breakdown",
+    "create_shipment": "Create Shipment",
+    "shipment_created": "Shipment created",
+    "shipment_from_pl": "Shipment will be created from this packing list",
+    "linked_shipment": "Linked shipment",
+    "additional_fees": "Additional Fees",
+    "cbm_count": "Number of CBM",
+    "price_calculation": "Price Calculation",
+    "estimated_total": "Estimated Total",
+    "fees_description": "Additional fees description",
+    "fees_description_placeholder": "e.g. Customs, insurance, handling...",
+    "create_shipment_selected": "Create Shipment from Selected",
+    "selected_items_summary": "Selection Summary",
+    "items_will_be_removed": "These items will be removed from the packing list and added to the new shipment.",
+    "lists": "Lists"
   }
 }

@@ -183,7 +183,8 @@
     "pending": "待处理",
     "cancelled": "已取消",
     "search_placeholder": "按参考号、客户搜索...",
-    "no_payments": "未找到付款记录"
+    "no_payments": "未找到付款记录",
+    "record_payment": "记录付款"
   },
   "expenses": {
     "title": "支出",
@@ -531,6 +532,23 @@
     "confirm_delete": "确定删除此装箱单？",
     "edit_details": "编辑详情",
     "link_shipment": "关联货运（可选）",
-    "no_shipment": "未关联货运"
+    "no_shipment": "未关联货运",
+    "amount": "金额",
+    "price_summary": "价格摘要",
+    "cbm_breakdown": "CBM明细",
+    "create_shipment": "创建货运",
+    "shipment_created": "货运已创建",
+    "shipment_from_pl": "将从此装箱单创建货运",
+    "linked_shipment": "已关联货运",
+    "additional_fees": "额外费用",
+    "cbm_count": "CBM数量",
+    "price_calculation": "价格计算",
+    "estimated_total": "估计总额",
+    "fees_description": "额外费用描述",
+    "fees_description_placeholder": "例如：关税、保险、搬运费...",
+    "create_shipment_selected": "从选中项创建货运",
+    "selected_items_summary": "选择摘要",
+    "items_will_be_removed": "这些项目将从装箱单中移除并添加到新货运中。",
+    "lists": "列表"
   }
 }

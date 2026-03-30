@@ -282,7 +282,8 @@
     "pending": "En attente",
     "cancelled": "Annulé",
     "search_placeholder": "Rechercher par référence, client...",
-    "no_payments": "Aucun paiement trouvé"
+    "no_payments": "Aucun paiement trouvé",
+    "record_payment": "Enregistrer un paiement"
   },
   "expenses": {
     "title": "Dépenses",
@@ -539,6 +540,23 @@
     "confirm_delete": "Êtes-vous sûr de vouloir supprimer cette liste de colisage ?",
     "edit_details": "Modifier les détails",
     "link_shipment": "Lier à une expédition (optionnel)",
-    "no_shipment": "Aucune expédition liée"
+    "no_shipment": "Aucune expédition liée",
+    "amount": "Montant",
+    "price_summary": "Récapitulatif du prix",
+    "cbm_breakdown": "Détail CBM",
+    "create_shipment": "Créer une expédition",
+    "shipment_created": "Expédition créée",
+    "shipment_from_pl": "L'expédition sera créée à partir de cette liste de colisage",
+    "linked_shipment": "Expédition liée",
+    "additional_fees": "Frais supplémentaires",
+    "cbm_count": "Nombre de CBM",
+    "price_calculation": "Calcul du prix",
+    "estimated_total": "Total estimé",
+    "fees_description": "Description des frais supplémentaires",
+    "fees_description_placeholder": "ex. Douane, assurance, manutention...",
+    "create_shipment_selected": "Créer une expédition avec la sélection",
+    "selected_items_summary": "Résumé de la sélection",
+    "items_will_be_removed": "Ces articles seront retirés de la liste de colisage et ajoutés à la nouvelle expédition.",
+    "lists": "Listes"
   }
 }
