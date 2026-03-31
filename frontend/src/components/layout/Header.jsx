@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Search, Bell, Menu, LogOut, Settings, User, Globe, X, Sun, Moon } from 'lucide-react';
+import { Search, Bell, Menu, LogOut, Settings, User, Globe, X, Sun, Moon, Plane } from 'lucide-react';
 
 export default function Header({ sidebarOpen, setSidebarOpen }) {
   const { t, i18n } = useTranslation();
@@ -61,15 +61,17 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
     if (!query || query.length < 2) { setSearchResults(null); return; }
     setSearchLoading(true);
     try {
-      const [shipmentsRes, clientsRes, paymentsRes] = await Promise.all([
+      const [shipmentsRes, clientsRes, paymentsRes, flightTicketsRes] = await Promise.all([
         api.get('/shipments', { params: { search: query, per_page: 5 } }),
         api.get('/clients', { params: { search: query, per_page: 5 } }),
         api.get('/payments', { params: { search: query, per_page: 5 } }),
+        api.get('/flight-tickets', { params: { search: query, per_page: 5 } }),
       ]);
       setSearchResults({
         shipments: shipmentsRes.data.data || [],
         clients: clientsRes.data.data || [],
         payments: paymentsRes.data.data || [],
+        flightTickets: flightTicketsRes.data.data || [],
       });
     } catch { setSearchResults(null); }
     finally { setSearchLoading(false); }
@@ -109,7 +111,7 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
     approved: 'Approuvé', rejected: 'Rejeté',
   };
 
-  const hasResults = searchResults && (searchResults.shipments.length > 0 || searchResults.clients.length > 0 || searchResults.payments.length > 0);
+  const hasResults = searchResults && (searchResults.shipments.length > 0 || searchResults.clients.length > 0 || searchResults.payments.length > 0 || searchResults.flightTickets?.length > 0);
 
   return (
     <header className="sticky top-0 z-30 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 transition-colors duration-200">
@@ -126,17 +128,26 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
             </button>
 
             {/* Search */}
-            <div className="relative hidden sm:block" ref={searchRef}>
-              <label htmlFor="header-search" className="sr-only">Search</label>
-              <input
-                id="header-search"
-                className="form-input w-64 pl-9 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary-500 rounded-lg border border-gray-200 text-sm py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:focus:bg-gray-600 dark:placeholder-gray-400"
-                type="search"
-                placeholder={t('common.search') || 'Rechercher...'}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <div className="relative hidden sm:flex items-center gap-1" ref={searchRef}>
+              <form onSubmit={(e) => { e.preventDefault(); if (searchQuery.length >= 2) { navigate(`/dashboard/search?q=${encodeURIComponent(searchQuery)}`); setSearchQuery(''); setSearchResults(null); } }} className="relative">
+                <label htmlFor="header-search" className="sr-only">Search</label>
+                <input
+                  id="header-search"
+                  className="form-input w-64 pl-9 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary-500 rounded-lg border border-gray-200 text-sm py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:focus:bg-gray-600 dark:placeholder-gray-400"
+                  type="search"
+                  placeholder={t('common.search') || 'Rechercher...'}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              </form>
+              <button
+                onClick={() => { if (searchQuery.length >= 2) { navigate(`/dashboard/search?q=${encodeURIComponent(searchQuery)}`); setSearchQuery(''); setSearchResults(null); } }}
+                className="p-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors shadow-sm"
+                title={t('common.search')}
+              >
+                <Search className="w-4 h-4" />
+              </button>
 
               {/* Search results dropdown */}
               {searchQuery.length >= 2 && (
@@ -177,6 +188,19 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
                               className="flex items-center gap-3 w-full px-3 py-2 hover:bg-gray-50 text-left">
                               <span className="text-sm font-mono text-primary-600">{p.reference}</span>
                               <span className="text-xs text-gray-400">{p.client?.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {searchResults.flightTickets?.length > 0 && (
+                        <div>
+                          <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase flex items-center gap-1"><Plane className="w-3 h-3" />Billets d'avion</div>
+                          {searchResults.flightTickets.map(tk => (
+                            <button key={tk.id} onClick={() => { navigate(`/dashboard/flight-tickets`); setSearchQuery(''); setSearchResults(null); }}
+                              className="flex items-center gap-3 w-full px-3 py-2 hover:bg-gray-50 text-left">
+                              <span className="text-sm font-mono text-primary-600">{tk.ticket_number}</span>
+                              <span className="text-xs text-gray-500">{tk.passenger_name}</span>
+                              <span className="text-xs text-gray-400">{tk.airline}</span>
                             </button>
                           ))}
                         </div>
@@ -335,16 +359,20 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
       {/* Mobile search bar */}
       {searchOpen && (
         <div className="sm:hidden px-4 pb-4">
-          <div className="relative">
+          <form onSubmit={(e) => { e.preventDefault(); if (searchQuery.length >= 2) { navigate(`/dashboard/search?q=${encodeURIComponent(searchQuery)}`); setSearchQuery(''); setSearchOpen(false); } }} className="relative">
             <input
-              className="form-input w-full pl-9 rounded-lg border border-gray-200 text-sm py-2"
+              className="form-input w-full pl-9 pr-16 rounded-lg border border-gray-200 text-sm py-2"
               type="search"
               placeholder={t('common.search') || 'Rechercher...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              autoFocus
             />
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          </div>
+            <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs font-medium text-primary-600 bg-primary-50 rounded hover:bg-primary-100">
+              OK
+            </button>
+          </form>
         </div>
       )}
     </header>

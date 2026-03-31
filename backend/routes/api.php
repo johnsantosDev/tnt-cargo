@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\CashAdvanceController;
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExpenseController;
+use App\Http\Controllers\Api\FlightTicketController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ReportController;
@@ -62,6 +63,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/invoices/from-shipment/{shipment}', [InvoiceController::class, 'generateFromShipment']);
     Route::get('/invoices/{invoice}/pdf', [InvoiceController::class, 'downloadPdf']);
 
+    // Flight Tickets
+    Route::apiResource('flight-tickets', FlightTicketController::class);
+    Route::get('/flight-tickets/{flightTicket}/receipt', [FlightTicketController::class, 'downloadReceipt']);
+    Route::get('/flight-tickets/{flightTicket}/proof', [FlightTicketController::class, 'downloadProof']);
+    Route::get('/flight-tickets/{flightTicket}/ticket-file', [FlightTicketController::class, 'downloadTicketFile']);
+    Route::get('/flight-tickets-stats', [FlightTicketController::class, 'stats']);
+
     // Packing Lists
     Route::apiResource('packing-lists', PackingListController::class);
     Route::post('/packing-lists/{packingList}/items', [PackingListController::class, 'addItem']);
@@ -80,6 +88,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/shipments', [ReportController::class, 'shipments']);
         Route::get('/debts', [ReportController::class, 'debts']);
         Route::get('/cash-advances', [ReportController::class, 'cashAdvances']);
+        Route::get('/flight-tickets', [ReportController::class, 'flightTickets']);
     });
 
     // Settings (admin only)

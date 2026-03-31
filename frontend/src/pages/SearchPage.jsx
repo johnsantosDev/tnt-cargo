@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { Card, CardBody, Badge, Spinner, StatusBadge } from '../components/ui';
-import { Search, Package, Users, CreditCard, Receipt, Banknote, FileText } from 'lucide-react';
+import { Search, Package, Users, CreditCard, Receipt, Banknote, FileText, Plane } from 'lucide-react';
 
 export default function SearchPage() {
   const { t } = useTranslation();
@@ -17,13 +17,14 @@ export default function SearchPage() {
     if (!q || q.length < 2) { setResults(null); return; }
     setLoading(true);
     try {
-      const [shipments, clients, payments, expenses, cashAdvances, invoices] = await Promise.all([
+      const [shipments, clients, payments, expenses, cashAdvances, invoices, flightTickets] = await Promise.all([
         api.get('/shipments', { params: { search: q, per_page: 20 } }),
         api.get('/clients', { params: { search: q, per_page: 20 } }),
         api.get('/payments', { params: { search: q, per_page: 20 } }),
         api.get('/expenses', { params: { search: q, per_page: 20 } }),
         api.get('/cash-advances', { params: { search: q, per_page: 20 } }),
         api.get('/invoices', { params: { search: q, per_page: 20 } }),
+        api.get('/flight-tickets', { params: { search: q, per_page: 20 } }),
       ]);
       setResults({
         shipments: shipments.data.data || [],
@@ -32,6 +33,7 @@ export default function SearchPage() {
         expenses: expenses.data.data || [],
         cashAdvances: cashAdvances.data.data || [],
         invoices: invoices.data.data || [],
+        flightTickets: flightTickets.data.data || [],
       });
     } catch { setResults(null); }
     finally { setLoading(false); }
@@ -51,7 +53,8 @@ export default function SearchPage() {
 
   const totalResults = results
     ? results.shipments.length + results.clients.length + results.payments.length +
-      results.expenses.length + results.cashAdvances.length + results.invoices.length
+      results.expenses.length + results.cashAdvances.length + results.invoices.length +
+      (results.flightTickets?.length || 0)
     : 0;
 
   const sections = [
@@ -135,6 +138,20 @@ export default function SearchPage() {
             <p className="text-xs text-gray-500">{item.client?.name}</p>
           </div>
           <span className="text-sm font-semibold text-gray-800">{formatMoney(item.total)}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'flightTickets', icon: Plane, label: t('nav.flight_tickets'), color: 'text-sky-600 bg-sky-50',
+      data: results?.flightTickets || [],
+      render: (item) => (
+        <div key={item.id} onClick={() => navigate('/dashboard/flight-tickets')}
+          className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors">
+          <div>
+            <p className="text-sm font-mono font-medium text-primary-600">{item.ticket_number}</p>
+            <p className="text-xs text-gray-500">{item.passenger_name} &middot; {item.airline}</p>
+          </div>
+          <span className="text-sm font-semibold text-gray-800">{formatMoney(item.total_price)}</span>
         </div>
       ),
     },

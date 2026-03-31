@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import {
   LayoutDashboard, Package, Users, CreditCard, Receipt,
   Banknote, FileText, BarChart3, Settings, LogOut,
-  Menu, X, ChevronLeft, ChevronRight, Coins, Box
+  Menu, X, ChevronLeft, ChevronRight, Coins, Box, Plane
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 
@@ -16,6 +16,7 @@ const navItems = [
   { key: 'expenses', path: '/dashboard/expenses', icon: Receipt, permission: 'view_expenses' },
   { key: 'cash_advances', path: '/dashboard/cash-advances', icon: Banknote, permission: 'view_cash_advances' },
   { key: 'invoices', path: '/dashboard/invoices', icon: FileText, permission: 'view_invoices' },
+  { key: 'flight_tickets', path: '/dashboard/flight-tickets', icon: Plane, permission: 'view_invoices' },
   { key: 'packing_lists', path: '/dashboard/packing-lists', icon: Box, permission: 'view_invoices' },
   { key: 'reports', path: '/dashboard/reports', icon: BarChart3, permission: 'view_reports' },
   { key: 'currency', path: '/dashboard/currency', icon: Coins },
@@ -84,7 +85,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
       <div
         id="sidebar"
         ref={sidebar}
-        className={`flex flex-col fixed z-50 left-0 top-0 lg:static lg:left-auto lg:top-auto h-screen no-scrollbar w-64 sidebar-expanded:!w-64 lg:w-20 2xl:sidebar-expanded:!w-64 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-64 lg:translate-x-0'}`}
+        className={`flex flex-col fixed z-50 left-0 top-0 lg:static lg:left-auto lg:top-auto h-screen w-64 sidebar-expanded:!w-64 lg:w-20 2xl:sidebar-expanded:!w-64 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-64 lg:translate-x-0'}`}
       >
         {/* Logo */}
         <div className="flex items-center justify-between px-4 h-16 border-b border-gray-100">
@@ -95,7 +96,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto no-scrollbar">
+        <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto sidebar-scroll">
           {navItems.map((item) => {
             if (item.permission && !hasPermission(item.permission) && item.permission !== 'view_dashboard') return null;
             return (

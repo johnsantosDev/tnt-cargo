@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CashAdvance;
 use App\Models\Client;
 use App\Models\Expense;
+use App\Models\FlightTicket;
 use App\Models\Payment;
 use App\Models\Shipment;
 use App\Models\ShipmentStatus;
@@ -19,11 +20,11 @@ class ReportController extends Controller
     private function getDateRange(Request $request): array
     {
         if ($request->filled('start_date') && $request->filled('end_date')) {
-            return [$request->start_date, $request->end_date];
+            return [$request->start_date . ' 00:00:00', $request->end_date . ' 23:59:59'];
         }
 
         $period = $request->get('period', 'month');
-        $end = now()->toDateString();
+        $end = now()->endOfDay()->toDateTimeString();
         $start = match($period) {
             'day', 'daily' => now()->subDays(30)->toDateString(),
             'week', 'weekly' => now()->subWeeks(12)->toDateString(),
@@ -89,9 +90,18 @@ class ReportController extends Controller
 
         $totalExpenses = Expense::where('status', 'approved')->sum('amount');
 
+        // Flight ticket revenue
+        $flightRevenue = FlightTicket::whereNotIn('status', ['cancelled', 'refunded'])
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->sum('amount_paid');
+        $totalFlightRevenue = FlightTicket::whereNotIn('status', ['cancelled', 'refunded'])
+            ->sum('amount_paid');
+
         // Use all-time if filtered period has no data
         $displayRevenue = $revenue > 0 ? $revenue : $totalRevenue;
         $displayExpenses = $expenses > 0 ? $expenses : $totalExpenses;
+        $displayFlightRevenue = $flightRevenue > 0 ? $flightRevenue : $totalFlightRevenue;
+        $displayRevenue += $displayFlightRevenue;
 
         // Chart data - group by selected period
         $chartData = [];
@@ -173,6 +183,7 @@ class ReportController extends Controller
                 'total_expenses' => (float)$displayExpenses,
                 'net_profit' => (float)$netProfit,
                 'margin' => $margin,
+                'flight_ticket_revenue' => (float)$displayFlightRevenue,
             ],
             'chart' => $chartData,
         ]);
@@ -302,6 +313,84 @@ class ReportController extends Controller
             'outstanding' => (float)$outstanding,
             'overdue_count' => $overdueCount,
             'trend' => $trend,
+        ]);
+    }
+
+    public function flightTickets(Request $request)
+    {
+        [$startDate, $endDate] = $this->getDateRange($request);
+
+        $query = FlightTicket::whereNotIn('status', ['cancelled', 'refunded']);
+        $periodQuery = (clone $query)->whereBetween('created_at', [$startDate, $endDate]);
+
+        $totalSales = $periodQuery->sum('total_price');
+        $totalCollected = (clone $query)->whereBetween('created_at', [$startDate, $endDate])->sum('amount_paid');
+        $totalPending = (clone $query)->whereBetween('created_at', [$startDate, $endDate])->sum('balance_due');
+        $ticketCount = (clone $query)->whereBetween('created_at', [$startDate, $endDate])->count();
+
+        // By airline
+        $byAirline = FlightTicket::whereNotIn('status', ['cancelled', 'refunded'])
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->selectRaw('airline as name, COUNT(*) as count, SUM(total_price) as total')
+            ->groupBy('airline')
+            ->orderByDesc('total')
+            ->limit(10)
+            ->get();
+
+        // By route
+        $byRoute = FlightTicket::whereNotIn('status', ['cancelled', 'refunded'])
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->selectRaw("CONCAT(departure_airport, ' → ', arrival_airport) as name, COUNT(*) as count, SUM(total_price) as total")
+            ->groupBy(DB::raw("CONCAT(departure_airport, ' → ', arrival_airport)"))
+            ->orderByDesc('count')
+            ->limit(10)
+            ->get();
+
+        // Trend
+        [$selectExpr, $groupExpr] = $this->getGroupByExpression($request);
+        $trendSelect = sprintf($selectExpr, 'created_at', 'created_at');
+        $trendGroup = sprintf($groupExpr, 'created_at');
+        $trend = FlightTicket::whereNotIn('status', ['cancelled', 'refunded'])
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->selectRaw("{$trendSelect}, COUNT(*) as tickets, SUM(total_price) as sales, SUM(amount_paid) as collected")
+            ->groupBy(DB::raw($trendGroup))
+            ->orderBy('date')
+            ->limit(60)
+            ->get();
+
+        // Recent tickets
+        $recentTickets = FlightTicket::whereNotIn('status', ['cancelled', 'refunded'])
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->orderByDesc('created_at')
+            ->limit(20)
+            ->get(['id', 'ticket_number', 'passenger_name', 'airline', 'departure_airport', 'arrival_airport', 'total_price', 'amount_paid', 'balance_due', 'currency', 'status', 'created_at']);
+
+        if ($request->filled('export')) {
+            $rows = $recentTickets->map(fn($t) => [
+                'N° Billet' => $t->ticket_number,
+                'Passager' => $t->passenger_name,
+                'Compagnie' => $t->airline,
+                'Route' => $t->departure_airport . ' → ' . $t->arrival_airport,
+                'Total' => $t->total_price,
+                'Payé' => $t->amount_paid,
+                'Solde' => $t->balance_due,
+                'Statut' => $t->status,
+                'Date' => $t->created_at->format('Y-m-d'),
+            ])->toArray();
+            return $this->exportCsv($rows, 'rapport-billets-avion');
+        }
+
+        return response()->json([
+            'summary' => [
+                'total_sales' => (float)$totalSales,
+                'total_collected' => (float)$totalCollected,
+                'total_pending' => (float)$totalPending,
+                'ticket_count' => $ticketCount,
+            ],
+            'by_airline' => $byAirline,
+            'by_route' => $byRoute,
+            'trend' => $trend,
+            'recent_tickets' => $recentTickets,
         ]);
     }
 }

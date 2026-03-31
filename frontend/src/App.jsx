@@ -11,6 +11,7 @@ import PaymentDetailPage from './pages/PaymentDetailPage';
 import ExpensesPage from './pages/ExpensesPage';
 import CashAdvancesPage from './pages/CashAdvancesPage';
 import InvoicesPage from './pages/InvoicesPage';
+import FlightTicketsPage from './pages/FlightTicketsPage';
 import PackingListsPage from './pages/PackingListsPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
@@ -62,6 +63,7 @@ export default function App() {
               <Route path="expenses" element={<ExpensesPage />} />
               <Route path="cash-advances" element={<CashAdvancesPage />} />
               <Route path="invoices" element={<InvoicesPage />} />
+              <Route path="flight-tickets" element={<FlightTicketsPage />} />
               <Route path="packing-lists" element={<PackingListsPage />} />
               <Route path="reports" element={<ReportsPage />} />
               <Route path="currency" element={<CurrencyPage />} />

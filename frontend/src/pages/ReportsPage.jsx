@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { Card, CardHeader, CardBody, Button, Select, Spinner, Input } from '../components/ui';
-import { Download, TrendingUp, Package, AlertTriangle, Banknote, FileText, FileSpreadsheet, Calendar } from 'lucide-react';
+import { Download, TrendingUp, Package, AlertTriangle, Banknote, FileText, FileSpreadsheet, Calendar, Plane } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend
@@ -40,7 +40,8 @@ export default function ReportsPage() {
     { key: 'financial', label: t('reports.financial'), icon: TrendingUp },
     { key: 'shipments', label: t('reports.shipments'), icon: Package },
     { key: 'debts', label: t('reports.debts'), icon: AlertTriangle },
-    { key: 'cash-advances', label: t('reports.cash_advances'), icon: Banknote }
+    { key: 'cash-advances', label: t('reports.cash_advances'), icon: Banknote },
+    { key: 'flight-tickets', label: t('reports.flight_tickets'), icon: Plane }
   ];
 
   const handleExport = async (format) => {
@@ -136,6 +137,7 @@ export default function ReportsPage() {
           {activeTab === 'shipments' && <ShipmentsReport data={data} t={t} />}
           {activeTab === 'debts' && <DebtsReport data={data} formatMoney={formatMoney} t={t} />}
           {activeTab === 'cash-advances' && <CashAdvancesReport data={data} formatMoney={formatMoney} t={t} />}
+          {activeTab === 'flight-tickets' && <FlightTicketsReport data={data} formatMoney={formatMoney} t={t} />}
         </>
       )}
     </div>
@@ -147,12 +149,13 @@ function FinancialReport({ data, formatMoney, t }) {
   const { summary, chart } = data;
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[
           { label: t('reports.total_revenue'), value: formatMoney(summary?.total_revenue), color: 'text-green-600' },
           { label: t('reports.total_expenses'), value: formatMoney(summary?.total_expenses), color: 'text-red-600' },
           { label: t('reports.net_profit'), value: formatMoney(summary?.net_profit), color: 'text-blue-600' },
-          { label: t('reports.margin'), value: `${summary?.margin || 0}%`, color: 'text-purple-600' }
+          { label: t('reports.margin'), value: `${summary?.margin || 0}%`, color: 'text-purple-600' },
+          { label: t('reports.flight_ticket_revenue'), value: formatMoney(summary?.flight_ticket_revenue), color: 'text-indigo-600' }
         ].map((item, i) => (
           <Card key={i}><CardBody className="text-center"><p className="text-sm text-gray-500">{item.label}</p><p className={`text-2xl font-bold mt-1 ${item.color}`}>{item.value}</p></CardBody></Card>
         ))}
@@ -277,6 +280,92 @@ function CashAdvancesReport({ data, formatMoney, t }) {
               <Line type="monotone" dataKey="recovered" name="Récupéré" stroke="#10B981" strokeWidth={2} />
             </LineChart>
           </ResponsiveContainer>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
+function FlightTicketsReport({ data, formatMoney, t }) {
+  if (!data) return null;
+  const { summary, by_airline, by_route, trend, recent_tickets } = data;
+  return (
+    <div className="space-y-6">
+      {/* KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <Card><CardBody className="text-center"><p className="text-sm text-gray-500">{t('reports.ft_ticket_count')}</p><p className="text-2xl font-bold mt-1">{summary?.ticket_count || 0}</p></CardBody></Card>
+        <Card><CardBody className="text-center"><p className="text-sm text-gray-500">{t('reports.ft_total_sales')}</p><p className="text-2xl font-bold mt-1 text-green-600">{formatMoney(summary?.total_sales)}</p></CardBody></Card>
+        <Card><CardBody className="text-center"><p className="text-sm text-gray-500">{t('reports.ft_collected')}</p><p className="text-2xl font-bold mt-1 text-blue-600">{formatMoney(summary?.total_collected)}</p></CardBody></Card>
+        <Card><CardBody className="text-center"><p className="text-sm text-gray-500">{t('reports.ft_pending')}</p><p className="text-2xl font-bold mt-1 text-red-600">{formatMoney(summary?.total_pending)}</p></CardBody></Card>
+      </div>
+
+      {/* Trend Chart */}
+      <Card>
+        <CardHeader><h3 className="font-semibold">{t('reports.ft_sales_trend')}</h3></CardHeader>
+        <CardBody>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={trend || []}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+              <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip formatter={(v) => formatMoney(v)} />
+              <Legend />
+              <Line type="monotone" dataKey="sales" name={t('reports.ft_total_sales')} stroke="#6366F1" strokeWidth={2} />
+              <Line type="monotone" dataKey="collected" name={t('reports.ft_collected')} stroke="#10B981" strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        </CardBody>
+      </Card>
+
+      {/* By Airline & By Route */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader><h3 className="font-semibold">{t('reports.ft_by_airline')}</h3></CardHeader>
+          <CardBody>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={by_airline || []} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <XAxis type="number" tick={{ fontSize: 12 }} />
+                <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={120} />
+                <Tooltip formatter={(v) => formatMoney(v)} />
+                <Bar dataKey="total" name={t('reports.ft_total_sales')} fill="#6366F1" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader><h3 className="font-semibold">{t('reports.ft_by_route')}</h3></CardHeader>
+          <CardBody>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie data={by_route || []} cx="50%" cy="50%" outerRadius={100} dataKey="count" nameKey="name" label={({ name, count }) => `${name} (${count})`}>
+                  {(by_route || []).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardBody>
+        </Card>
+      </div>
+
+      {/* Recent Tickets */}
+      <Card>
+        <CardHeader><h3 className="font-semibold">{t('reports.ft_recent_tickets')}</h3></CardHeader>
+        <CardBody className="p-0">
+          <div className="divide-y">
+            {(recent_tickets || []).map((tk) => (
+              <div key={tk.id} className="px-6 py-3 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">{tk.passenger_name}</p>
+                  <p className="text-xs text-gray-500">{tk.airline} · {tk.departure_airport} → {tk.arrival_airport}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold">{formatMoney(tk.total_price)}</p>
+                  {tk.balance_due > 0 && <p className="text-xs text-red-500">Solde: {formatMoney(tk.balance_due)}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
         </CardBody>
       </Card>
     </div>
