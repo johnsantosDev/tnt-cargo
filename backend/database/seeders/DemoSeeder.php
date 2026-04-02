@@ -268,11 +268,12 @@ class DemoSeeder extends Seeder
             }
         }
 
-        // Create additional users
+        // Create additional users (one per role for testing)
         $users = [
-            ['name' => 'Marie Kasongo', 'email' => 'marie@tntcargo.com', 'role' => 'manager'],
-            ['name' => 'Joseph Kalume', 'email' => 'joseph@tntcargo.com', 'role' => 'agent'],
-            ['name' => 'Alice Mwamba', 'email' => 'alice@tntcargo.com', 'role' => 'finance'],
+            ['name' => 'Marie Kasongo', 'email' => 'manager@tntcargo.com', 'role' => 'manager'],
+            ['name' => 'Joseph Kalume', 'email' => 'agent@tntcargo.com', 'role' => 'agent'],
+            ['name' => 'Alice Mwamba', 'email' => 'finance@tntcargo.com', 'role' => 'finance'],
+            ['name' => 'Pierre Lukeba', 'email' => 'viewer@tntcargo.com', 'role' => 'viewer'],
         ];
 
         foreach ($users as $u) {

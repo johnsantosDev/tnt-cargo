@@ -119,8 +119,12 @@ class ExpenseController extends Controller
         ]);
     }
 
-    public function destroy(Expense $expense): JsonResponse
+    public function destroy(Request $request, Expense $expense): JsonResponse
     {
+        if (!$request->user()->can('delete_expenses')) {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
         AuditService::log('deleted', $expense, $expense->toArray(), null);
         $expense->delete();
 

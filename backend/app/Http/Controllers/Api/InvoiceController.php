@@ -200,8 +200,12 @@ class InvoiceController extends Controller
         return $pdf->download("facture-{$clientName}-{$invoice->invoice_number}.pdf");
     }
 
-    public function destroy(Invoice $invoice): JsonResponse
+    public function destroy(Request $request, Invoice $invoice): JsonResponse
     {
+        if (!$request->user()->can('delete_invoices')) {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
         AuditService::log('deleted', $invoice, $invoice->toArray(), null);
         $invoice->delete();
 

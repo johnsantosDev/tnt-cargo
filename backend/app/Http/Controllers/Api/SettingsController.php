@@ -48,6 +48,10 @@ class SettingsController extends Controller
 
     public function deleteUser(User $user): JsonResponse
     {
+        if (!auth()->user()->hasAnyRole(['admin', 'manager'])) {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
         if ($user->id === auth()->id()) {
             return response()->json(['message' => 'Vous ne pouvez pas supprimer votre propre compte.'], 403);
         }
@@ -118,6 +122,10 @@ class SettingsController extends Controller
 
     public function createUser(Request $request): JsonResponse
     {
+        if (!$request->user()->hasAnyRole(['admin', 'manager'])) {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users',
@@ -147,6 +155,10 @@ class SettingsController extends Controller
 
     public function updateUser(Request $request, User $user): JsonResponse
     {
+        if (!$request->user()->hasAnyRole(['admin', 'manager'])) {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
             'email' => 'sometimes|email|unique:users,email,' . $user->id,

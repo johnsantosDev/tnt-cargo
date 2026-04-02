@@ -49,11 +49,11 @@ export default function PaymentsPage() {
 
   const columns = [
     { key: 'reference', label: t('payments.reference'), render: (row) => <button onClick={() => navigate(`/dashboard/payments/${row.id}`)} className="font-mono text-sm text-primary-700 hover:text-primary-900 hover:underline">{row.reference}</button> },
-    { key: 'client', label: t('payments.client'), render: (row) => row.client?.name || '-' },
-    { key: 'shipment', label: t('payments.shipment'), render: (row) => row.shipment?.tracking_number || '-' },
-    { key: 'amount', label: t('payments.amount'), render: (row) => <span className="font-medium text-green-600">{formatMoney(row.amount)}</span> },
-    { key: 'method', label: t('payments.method'), render: (row) => methodBadge(row.method) },
-    { key: 'date', label: t('payments.date'), render: (row) => formatDate(row.payment_date) },
+    { key: 'client', label: t('payments.client'), render: (row) => row.client?.name || '-', exportValue: (row) => row.client?.name || '-' },
+    { key: 'shipment', label: t('payments.shipment'), render: (row) => row.shipment?.tracking_number || '-', exportValue: (row) => row.shipment?.tracking_number || '-' },
+    { key: 'amount', label: t('payments.amount'), render: (row) => <span className="font-medium text-green-600">{formatMoney(row.amount)}</span>, exportValue: (row) => formatMoney(row.amount) },
+    { key: 'method', label: t('payments.method'), render: (row) => methodBadge(row.method), exportValue: (row) => ({ cash: 'Cash', mobile_money: 'Mobile Money', bank_transfer: 'Virement', check: 'Chèque' }[row.method] || row.method) },
+    { key: 'date', label: t('payments.date'), render: (row) => formatDate(row.payment_date), exportValue: (row) => formatDate(row.payment_date) },
     {
       key: 'actions', label: '', render: (row) => (
         <div className="flex gap-1">

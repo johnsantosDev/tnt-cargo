@@ -357,7 +357,12 @@
     "action": "操作",
     "model": "模型",
     "description": "描述",
-    "date": "日期"
+    "date": "日期",
+    "my_account": "我的账户",
+    "change_password": "修改密码",
+    "current_password": "当前密码",
+    "new_password": "新密码",
+    "password_changed": "密码修改成功。"
   },
   "common": {
     "save": "保存",

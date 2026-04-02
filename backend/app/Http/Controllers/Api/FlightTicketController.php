@@ -206,8 +206,12 @@ class FlightTicketController extends Controller
         ]);
     }
 
-    public function destroy(FlightTicket $flightTicket): JsonResponse
+    public function destroy(Request $request, FlightTicket $flightTicket): JsonResponse
     {
+        if (!$request->user()->can('delete_invoices')) {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
         AuditService::log('deleted', $flightTicket, $flightTicket->toArray(), null);
         $flightTicket->delete();
 

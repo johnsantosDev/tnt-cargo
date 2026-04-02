@@ -1,9 +1,8 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
-
-export function exportToPDF(columns, data, filename = 'export') {
+export async function exportToPDF(columns, data, filename = 'export') {
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ]);
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -54,7 +53,11 @@ export function exportToPDF(columns, data, filename = 'export') {
   doc.save(`${filename}.pdf`);
 }
 
-export function exportToExcel(columns, data, filename = 'export') {
+export async function exportToExcel(columns, data, filename = 'export') {
+  const [XLSX, { saveAs }] = await Promise.all([
+    import('xlsx'),
+    import('file-saver'),
+  ]);
   const headers = columns.filter(c => c.key !== 'actions').map(c => c.label);
   const rows = data.map(row =>
     columns.filter(c => c.key !== 'actions').map(col => {
@@ -73,7 +76,11 @@ export function exportToExcel(columns, data, filename = 'export') {
   saveAs(new Blob([buf], { type: 'application/octet-stream' }), `${filename}.xlsx`);
 }
 
-export function exportCashAdvanceInvoice(advance, t) {
+export async function exportCashAdvanceInvoice(advance, t) {
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ]);
   const doc = new jsPDF();
   const pw = doc.internal.pageSize.getWidth();
   const ph = doc.internal.pageSize.getHeight();

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardHeader, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal, Textarea } from '../components/ui';
-import { Settings, Users, Shield, Clock, Plus, Edit2, Trash2, Save } from 'lucide-react';
+import { Settings, Users, Shield, Clock, Plus, Edit2, Trash2, Save, KeyRound } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
@@ -11,10 +11,13 @@ export default function SettingsPage() {
   const { hasPermission, hasRole } = useAuth();
   const [activeTab, setActiveTab] = useState('general');
 
+  const canManageUsers = hasRole('admin') || hasRole('manager');
+
   const tabs = [
     { key: 'general', label: t('settings.general'), icon: Settings },
-    { key: 'users', label: t('settings.users'), icon: Users },
-    { key: 'roles', label: t('settings.roles'), icon: Shield },
+    { key: 'account', label: t('settings.my_account') || 'Mon compte', icon: KeyRound },
+    ...(canManageUsers ? [{ key: 'users', label: t('settings.users'), icon: Users }] : []),
+    ...(canManageUsers ? [{ key: 'roles', label: t('settings.roles'), icon: Shield }] : []),
     { key: 'audit', label: t('settings.audit_logs'), icon: Clock }
   ];
 
@@ -35,8 +38,9 @@ export default function SettingsPage() {
       </div>
 
       {activeTab === 'general' && <GeneralSettings />}
-      {activeTab === 'users' && <UsersSettings />}
-      {activeTab === 'roles' && <RolesSettings />}
+      {activeTab === 'account' && <MyAccountSettings />}
+      {activeTab === 'users' && canManageUsers && <UsersSettings />}
+      {activeTab === 'roles' && canManageUsers && <RolesSettings />}
       {activeTab === 'audit' && <AuditLogs />}
     </div>
   );
@@ -96,6 +100,44 @@ function GeneralSettings() {
         <Button onClick={handleSave} loading={saving}><Save className="w-4 h-4 mr-2" />{t('settings.save')}</Button>
       </div>
     </div>
+  );
+}
+
+function MyAccountSettings() {
+  const { t } = useTranslation();
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({ current_password: '', password: '', password_confirmation: '' });
+  const [errors, setErrors] = useState({});
+  const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrors({});
+    try {
+      await api.put('/change-password', form);
+      toast.success(t('settings.password_changed') || 'Mot de passe modifié avec succès.');
+      setForm({ current_password: '', password: '', password_confirmation: '' });
+    } catch (err) {
+      if (err.response?.status === 422) setErrors(err.response.data.errors || {});
+      else toast.error(t('common.error'));
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <Card>
+      <CardHeader><h3 className="font-semibold">{t('settings.change_password') || 'Changer le mot de passe'}</h3></CardHeader>
+      <CardBody>
+        <form onSubmit={handleSubmit} className="space-y-4 max-w-md">
+          <Input label={t('settings.current_password') || 'Mot de passe actuel'} type="password" value={form.current_password} onChange={set('current_password')} error={errors.current_password?.[0]} required />
+          <Input label={t('settings.new_password') || 'Nouveau mot de passe'} type="password" value={form.password} onChange={set('password')} error={errors.password?.[0]} required />
+          <Input label={t('settings.password_confirmation')} type="password" value={form.password_confirmation} onChange={set('password_confirmation')} required />
+          <div className="flex justify-end pt-2">
+            <Button type="submit" loading={loading}><Save className="w-4 h-4 mr-2" />{t('settings.save')}</Button>
+          </div>
+        </form>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -272,7 +314,7 @@ function AuditLogs() {
   const columns = [
     { key: 'user', label: t('settings.user'), render: (row) => row.user?.name || 'Système' },
     { key: 'action', label: t('settings.action'), render: (row) => <Badge variant={row.action === 'delete' ? 'red' : row.action === 'create' ? 'green' : 'blue'}>{row.action}</Badge> },
-    { key: 'model', label: t('settings.model'), render: (row) => `${row.auditable_type?.split('\\').pop()} #${row.auditable_id}` },
+    { key: 'model', label: t('settings.model'), render: (row) => `${row.model_type?.split('\\').pop() || '?'} #${row.model_id || '?'}` },
     { key: 'description', label: t('settings.description'), render: (row) => <span className="text-sm truncate max-w-[300px] block">{row.description}</span> },
     { key: 'ip', label: 'IP', render: (row) => <span className="font-mono text-xs">{row.ip_address}</span> },
     { key: 'date', label: t('settings.date'), render: (row) => formatDate(row.created_at) }

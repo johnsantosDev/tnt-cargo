@@ -127,8 +127,12 @@ class PaymentController extends Controller
         ]);
     }
 
-    public function destroy(Payment $payment): JsonResponse
+    public function destroy(Request $request, Payment $payment): JsonResponse
     {
+        if (!$request->user()->can('delete_payments')) {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
         AuditService::log('deleted', $payment, $payment->toArray(), null);
         $payment->delete();
 

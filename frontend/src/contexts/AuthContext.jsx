@@ -47,7 +47,15 @@ export function AuthProvider({ children }) {
   };
 
   const hasPermission = (permission) => {
-    return user?.permissions?.includes(permission) || user?.roles?.includes('admin');
+    if (user?.roles?.includes('admin')) return true;
+    // Support both 'module.action' and 'action_module' formats
+    if (user?.permissions?.includes(permission)) return true;
+    // Convert 'payments.delete' to 'delete_payments'
+    if (permission.includes('.')) {
+      const [module, action] = permission.split('.');
+      return user?.permissions?.includes(`${action}_${module}`) || false;
+    }
+    return false;
   };
 
   const hasRole = (role) => {

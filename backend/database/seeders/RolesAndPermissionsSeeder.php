@@ -31,6 +31,7 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'manage_roles']);
         Permission::firstOrCreate(['name' => 'view_all_shipments']);
         Permission::firstOrCreate(['name' => 'approve_expenses']);
+        Permission::firstOrCreate(['name' => 'manage_users']);
 
         $admin = Role::firstOrCreate(['name' => 'admin']);
         $admin->givePermissionTo(Permission::all());
@@ -38,14 +39,15 @@ class RolesAndPermissionsSeeder extends Seeder
         $manager = Role::firstOrCreate(['name' => 'manager']);
         $manager->givePermissionTo([
             'view_dashboard',
-            'view_shipments', 'create_shipments', 'edit_shipments', 'export_shipments', 'view_all_shipments',
-            'view_clients', 'create_clients', 'edit_clients', 'export_clients',
-            'view_payments', 'create_payments', 'edit_payments', 'export_payments',
-            'view_expenses', 'create_expenses', 'edit_expenses', 'export_expenses', 'approve_expenses',
-            'view_cash_advances', 'create_cash_advances', 'edit_cash_advances', 'export_cash_advances',
-            'view_invoices', 'create_invoices', 'edit_invoices', 'export_invoices',
+            'view_shipments', 'create_shipments', 'edit_shipments', 'delete_shipments', 'export_shipments', 'view_all_shipments',
+            'view_clients', 'create_clients', 'edit_clients', 'delete_clients', 'export_clients',
+            'view_payments', 'create_payments', 'edit_payments', 'delete_payments', 'export_payments',
+            'view_expenses', 'create_expenses', 'edit_expenses', 'delete_expenses', 'export_expenses', 'approve_expenses',
+            'view_cash_advances', 'create_cash_advances', 'edit_cash_advances', 'delete_cash_advances', 'export_cash_advances',
+            'view_invoices', 'create_invoices', 'edit_invoices', 'delete_invoices', 'export_invoices',
             'view_reports', 'export_reports',
             'view_users',
+            'manage_users', 'manage_roles',
         ]);
 
         $agent = Role::firstOrCreate(['name' => 'agent']);

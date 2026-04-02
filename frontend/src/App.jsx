@@ -1,25 +1,35 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import DashboardLayout from './components/layout/DashboardLayout';
-import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
-import ShipmentsPage from './pages/ShipmentsPage';
-import ShipmentDetailPage from './pages/ShipmentDetailPage';
-import ClientsPage from './pages/ClientsPage';
-import PaymentsPage from './pages/PaymentsPage';
-import PaymentDetailPage from './pages/PaymentDetailPage';
-import ExpensesPage from './pages/ExpensesPage';
-import CashAdvancesPage from './pages/CashAdvancesPage';
-import InvoicesPage from './pages/InvoicesPage';
-import FlightTicketsPage from './pages/FlightTicketsPage';
-import PackingListsPage from './pages/PackingListsPage';
-import ReportsPage from './pages/ReportsPage';
-import SettingsPage from './pages/SettingsPage';
-import CurrencyPage from './pages/CurrencyPage';
-import SearchPage from './pages/SearchPage';
-import LandingPage from './pages/LandingPage';
-import TrackingPage from './pages/TrackingPage';
 import './i18n';
+
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const ShipmentsPage = lazy(() => import('./pages/ShipmentsPage'));
+const ShipmentDetailPage = lazy(() => import('./pages/ShipmentDetailPage'));
+const ClientsPage = lazy(() => import('./pages/ClientsPage'));
+const PaymentsPage = lazy(() => import('./pages/PaymentsPage'));
+const PaymentDetailPage = lazy(() => import('./pages/PaymentDetailPage'));
+const ExpensesPage = lazy(() => import('./pages/ExpensesPage'));
+const CashAdvancesPage = lazy(() => import('./pages/CashAdvancesPage'));
+const InvoicesPage = lazy(() => import('./pages/InvoicesPage'));
+const FlightTicketsPage = lazy(() => import('./pages/FlightTicketsPage'));
+const PackingListsPage = lazy(() => import('./pages/PackingListsPage'));
+const ReportsPage = lazy(() => import('./pages/ReportsPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const CurrencyPage = lazy(() => import('./pages/CurrencyPage'));
+const SearchPage = lazy(() => import('./pages/SearchPage'));
+const LandingPage = lazy(() => import('./pages/LandingPage'));
+const TrackingPage = lazy(() => import('./pages/TrackingPage'));
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+    </div>
+  );
+}
 
 function ProtectedRoute() {
   const { user, loading } = useAuth();
@@ -39,6 +49,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* Public */}
           <Route path="/" element={<LandingPage />} />
@@ -75,6 +86,7 @@ export default function App() {
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </AuthProvider>
     </BrowserRouter>
   );

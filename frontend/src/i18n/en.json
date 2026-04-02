@@ -456,7 +456,12 @@
     "action": "Action",
     "model": "Model",
     "description": "Description",
-    "date": "Date"
+    "date": "Date",
+    "my_account": "My Account",
+    "change_password": "Change Password",
+    "current_password": "Current Password",
+    "new_password": "New Password",
+    "password_changed": "Password changed successfully."
   },
   "common": {
     "save": "Save",

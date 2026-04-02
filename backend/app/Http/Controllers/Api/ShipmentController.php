@@ -207,8 +207,12 @@ class ShipmentController extends Controller
         ]);
     }
 
-    public function destroy(Shipment $shipment): JsonResponse
+    public function destroy(Request $request, Shipment $shipment): JsonResponse
     {
+        if (!$request->user()->can('delete_shipments')) {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
         AuditService::log('deleted', $shipment, $shipment->toArray(), null);
         $shipment->delete();
 

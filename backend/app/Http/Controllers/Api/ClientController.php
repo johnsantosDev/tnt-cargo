@@ -96,8 +96,12 @@ class ClientController extends Controller
         ]);
     }
 
-    public function destroy(Client $client): JsonResponse
+    public function destroy(Request $request, Client $client): JsonResponse
     {
+        if (!$request->user()->can('delete_clients')) {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
         AuditService::log('deleted', $client, $client->toArray(), null);
         $client->delete();
 

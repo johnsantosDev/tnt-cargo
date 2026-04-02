@@ -140,8 +140,12 @@ class CashAdvanceController extends Controller
         ]);
     }
 
-    public function destroy(CashAdvance $cashAdvance): JsonResponse
+    public function destroy(Request $request, CashAdvance $cashAdvance): JsonResponse
     {
+        if (!$request->user()->can('delete_cash_advances')) {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
         AuditService::log('deleted', $cashAdvance, $cashAdvance->toArray(), null);
         $cashAdvance->delete();
 
