@@ -37,7 +37,7 @@
                     <div class="company-name">TNT Cargo</div>
                     <div class="company-info">
                         Logistique internationale<br>
-                        Goma, RDC<br>
+                        RDC<br>
                         contact@tntcargo.com
                     </div>
                 </td>
@@ -129,7 +129,7 @@
         </div>
 
         <div class="footer">
-            <p>TNT Cargo - Logistique internationale | Goma, RDC</p>
+            <p>TNT Cargo - Logistique internationale | RDC</p>
             <p>Document généré le {{ now()->format('d/m/Y à H:i') }}</p>
         </div>
     </div>

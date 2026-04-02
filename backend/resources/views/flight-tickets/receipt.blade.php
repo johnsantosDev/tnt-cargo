@@ -66,7 +66,7 @@
                                 <div class="company-name">TNT Cargo</div>
                                 <div class="company-info">
                                     Logistique internationale & Billetterie<br>
-                                    Goma, RDC<br>
+                                    RDC<br>
                                     contact@tntcargo.com
                                 </div>
                             </td>
@@ -247,7 +247,7 @@
 
     <div class="footer">
         <div class="footer-brand">TNT CARGO</div>
-        <div class="footer-info">Logistique internationale & Billetterie • Goma, RDC • contact@tntcargo.com</div>
+        <div class="footer-info">Logistique internationale & Billetterie • RDC • contact@tntcargo.com</div>
     </div>
 </body>
 </html>

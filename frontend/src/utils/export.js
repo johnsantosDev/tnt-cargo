@@ -47,7 +47,7 @@ export function exportToPDF(columns, data, filename = 'export') {
       doc.text('TNT Cargo System', pageWidth / 2, pageHeight - 12, { align: 'center' });
       doc.setFontSize(7);
       doc.setTextColor(150);
-      doc.text('Logistique internationale — Goma, RDC', pageWidth / 2, pageHeight - 8, { align: 'center' });
+      doc.text('Logistique internationale — RDC', pageWidth / 2, pageHeight - 8, { align: 'center' });
     },
   });
 
@@ -86,7 +86,7 @@ export function exportCashAdvanceInvoice(advance, t) {
   doc.text('TNT Cargo System', 14, 20);
   doc.setFontSize(10);
   doc.setTextColor(100);
-  doc.text('Logistique internationale — Goma, RDC', 14, 27);
+  doc.text('Logistique internationale — RDC', 14, 27);
 
   // Invoice title
   doc.setFontSize(16);
@@ -172,7 +172,7 @@ export function exportCashAdvanceInvoice(advance, t) {
   doc.text('TNT Cargo System', pw / 2, ph - 12, { align: 'center' });
   doc.setFontSize(7);
   doc.setTextColor(150);
-  doc.text('Logistique internationale — Goma, RDC', pw / 2, ph - 8, { align: 'center' });
+  doc.text('Logistique internationale — RDC', pw / 2, ph - 8, { align: 'center' });
 
   doc.save(`avance-${advance.reference}.pdf`);
 }

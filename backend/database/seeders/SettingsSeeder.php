@@ -14,7 +14,7 @@ class SettingsSeeder extends Seeder
             ['group' => 'general', 'key' => 'primary_color', 'value' => '#1E40AF', 'type' => 'string'],
             ['group' => 'general', 'key' => 'default_currency', 'value' => 'USD', 'type' => 'string'],
             ['group' => 'general', 'key' => 'default_locale', 'value' => 'fr', 'type' => 'string'],
-            ['group' => 'general', 'key' => 'company_address', 'value' => 'Goma, RDC', 'type' => 'string'],
+            ['group' => 'general', 'key' => 'company_address', 'value' => 'RDC', 'type' => 'string'],
             ['group' => 'general', 'key' => 'company_phone', 'value' => '', 'type' => 'string'],
             ['group' => 'general', 'key' => 'company_email', 'value' => 'contact@tntcargo.com', 'type' => 'string'],
 
