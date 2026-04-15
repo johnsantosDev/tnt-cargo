@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\RegionContext;
 use App\Models\Expense;
 use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
@@ -13,6 +14,7 @@ class ExpenseController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = Expense::with(['approver', 'creator']);
+        RegionContext::apply($query, $request);
 
         if ($request->filled('category')) {
             $query->where('category', $request->category);
@@ -53,6 +55,7 @@ class ExpenseController extends Controller
 
         $validated['reference'] = Expense::generateReference();
         $validated['created_by'] = $request->user()->id;
+        $validated['region'] = RegionContext::resolveWriteRegion($request);
 
         if ($request->hasFile('receipt')) {
             $validated['receipt_path'] = $request->file('receipt')->store('expense-receipts', 'local');

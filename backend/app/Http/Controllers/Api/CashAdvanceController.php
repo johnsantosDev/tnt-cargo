@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\RegionContext;
 use App\Models\CashAdvance;
 use App\Models\CashAdvancePayment;
 use App\Services\AuditService;
@@ -14,6 +15,7 @@ class CashAdvanceController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = CashAdvance::with(['client', 'creator']);
+        RegionContext::apply($query, $request);
 
         if ($request->filled('client_id')) {
             $query->where('client_id', $request->client_id);
@@ -52,6 +54,7 @@ class CashAdvanceController extends Controller
 
         $validated['reference'] = CashAdvance::generateReference();
         $validated['created_by'] = $request->user()->id;
+        $validated['region'] = RegionContext::resolveWriteRegion($request);
 
         $advance = new CashAdvance($validated);
         $advance->calculateTotalDue();

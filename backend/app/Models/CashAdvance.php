@@ -14,7 +14,7 @@ class CashAdvance extends Model
         'reference', 'client_id', 'amount', 'currency',
         'interest_rate', 'commission_rate', 'total_due', 'total_paid', 'balance',
         'supplier_reference', 'supplier_details',
-        'status', 'issue_date', 'due_date', 'notes', 'created_by',
+        'status', 'issue_date', 'due_date', 'notes', 'created_by', 'region',
     ];
 
     protected function casts(): array

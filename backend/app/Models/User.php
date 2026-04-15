@@ -18,6 +18,7 @@ class User extends Authenticatable
         'name',
         'email',
         'phone',
+        'region',
         'password',
         'avatar',
         'locale',

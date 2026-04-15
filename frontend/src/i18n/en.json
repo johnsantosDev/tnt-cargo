@@ -15,7 +15,8 @@
     "settings": "Settings",
     "tracking": "Tracking",
     "logout": "Logout",
-    "profile": "Profile"
+    "profile": "Profile",
+    "transfers": "Transfers"
   },
   "auth": {
     "login": "Login",
@@ -54,7 +55,13 @@
     "period": "Period",
     "week": "Week",
     "month": "Month",
-    "year": "Year"
+    "year": "Year",
+    "day": "Day",
+    "today_revenue": "Today's Revenue",
+    "today_expenses": "Today's Expenses",
+    "today_shipments": "Today's Shipments",
+    "region": "Region",
+    "all_regions": "All Regions"
   },
   "tracking": {
     "title": "Track your package",
@@ -259,7 +266,8 @@
     "shipments": "Shipments",
     "search": "Search clients...",
     "search_placeholder": "Search by name, phone...",
-    "no_clients": "No clients found"
+    "no_clients": "No clients found",
+    "phone_code": "Country Code"
   },
   "payments": {
     "title": "Payments",
@@ -427,7 +435,13 @@
     "ft_sales_trend": "Sales Trend",
     "ft_by_airline": "By Airline",
     "ft_by_route": "By Route",
-    "ft_recent_tickets": "Recent Tickets"
+    "ft_recent_tickets": "Recent Tickets",
+    "transfers": "Transfers",
+    "containers": "Containers",
+    "total_containers": "Total Containers",
+    "container_profit": "Container Profit",
+    "region": "Region",
+    "all_regions": "All Regions"
   },
   "settings": {
     "title": "Settings",
@@ -461,7 +475,8 @@
     "change_password": "Change Password",
     "current_password": "Current Password",
     "new_password": "New Password",
-    "password_changed": "Password changed successfully."
+    "password_changed": "Password changed successfully.",
+    "region": "Region"
   },
   "common": {
     "save": "Save",
@@ -557,6 +572,7 @@
     "generate_invoice": "Generate Invoice",
     "invoice_generated": "Invoice generated",
     "confirm_delete_item": "Are you sure you want to delete this item?",
+    "download_receipt": "Download receipt",
     "confirm_delete": "Are you sure you want to delete this packing list?",
     "edit_details": "Edit Details",
     "link_shipment": "Link to Shipment (optional)",
@@ -655,5 +671,63 @@
     "other_client": "Client not listed...",
     "custom_client_placeholder": "Client name",
     "search_client": "Search a client..."
+  },
+  "transfers": {
+    "title": "Transfers",
+    "create": "New Transfer",
+    "reference": "Reference",
+    "transfer_code": "Transfer Code",
+    "client": "Client",
+    "client_name": "Client Name",
+    "client_phone": "Phone",
+    "amount": "Amount",
+    "currency": "Currency",
+    "origin_region": "Origin Region",
+    "destination_region": "Destination Region",
+    "status": "Status",
+    "status_pending": "Pending Approval",
+    "status_approved": "Approved",
+    "status_rejected": "Rejected",
+    "status_completed": "Completed",
+    "status_cancelled": "Cancelled",
+    "approve": "Approve",
+    "reject": "Reject",
+    "complete": "Complete",
+    "receipt": "Receipt",
+    "completion_doc": "Completion Document",
+    "verify": "Verify",
+    "notes": "Notes",
+    "no_transfers": "No transfers found",
+    "search_placeholder": "Search by reference, client...",
+    "all_statuses": "All statuses",
+    "qr_code": "QR Code",
+    "approved_by": "Approved by",
+    "completed_by": "Completed by",
+    "created_at": "Created at",
+    "confirm_approve": "Confirm approval of this transfer?",
+    "confirm_reject": "Confirm rejection of this transfer?",
+    "confirm_complete": "Confirm completion of this transfer?",
+    "complete_transfer": "Complete Transfer",
+    "confirm_complete_title": "Confirm fund delivery",
+    "confirm_complete_desc": "By completing this transfer, you confirm the client received the funds at destination. An acknowledgment document will be generated for signature.",
+    "completion_notes": "Completion notes (optional)",
+    "completion_notes_placeholder": "Add notes about the fund delivery...",
+    "confirm_complete_btn": "Confirm Completion",
+    "search_client_placeholder": "Search a client...",
+    "document": "Document (PDF, Image)",
+    "document_attached": "Document attached",
+    "signed_document": "Signed Document",
+    "upload_signed": "Upload signed document",
+    "upload_signed_desc": "Upload the signed copy of the completion document by the client.",
+    "signed_uploaded": "Signed document uploaded",
+    "download_signed": "Download signed document"
+  },
+  "shipment_completion": {
+    "complete": "Complete Shipment",
+    "completion_note": "Completion Note",
+    "confirm": "Confirm Completion",
+    "warning": "This will mark the shipment as delivered and generate a withdrawal document.",
+    "download_doc": "Download Withdrawal Document",
+    "completed": "Shipment Completed"
   }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\RegionContext;
 use App\Models\Client;
 use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
@@ -13,6 +14,7 @@ class ClientController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = Client::query();
+        RegionContext::apply($query, $request);
 
         if ($request->filled('type')) {
             $query->where('type', $request->type);
@@ -43,6 +45,7 @@ class ClientController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'nullable|email|max:255',
             'phone' => 'nullable|string|max:20',
+            'phone_code' => 'nullable|string|max:10',
             'phone_secondary' => 'nullable|string|max:20',
             'company' => 'nullable|string|max:255',
             'address' => 'nullable|string',
@@ -53,6 +56,7 @@ class ClientController extends Controller
         ]);
 
         $validated['created_by'] = $request->user()->id;
+        $validated['region'] = RegionContext::resolveWriteRegion($request);
 
         $client = Client::create($validated);
         AuditService::log('created', $client, null, $client->toArray());
@@ -76,6 +80,7 @@ class ClientController extends Controller
             'name' => 'sometimes|string|max:255',
             'email' => 'nullable|email|max:255',
             'phone' => 'nullable|string|max:20',
+            'phone_code' => 'nullable|string|max:10',
             'phone_secondary' => 'nullable|string|max:20',
             'company' => 'nullable|string|max:255',
             'address' => 'nullable|string',

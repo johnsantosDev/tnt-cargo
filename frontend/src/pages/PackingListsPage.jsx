@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { Card, CardBody, Button, Input, Select, Pagination, Badge, Modal, Textarea } from '../components/ui';
 import SearchableSelect from '../components/ui/SearchableSelect';
-import { Plus, Search, Eye, Package, CheckCircle, FileText, Trash2, Edit3, Box, Settings2, Truck, DollarSign } from 'lucide-react';
+import { Plus, Search, Eye, Package, CheckCircle, FileText, Trash2, Edit3, Box, Settings2, Truck, DollarSign, Download } from 'lucide-react';
 import ExportButtons from '../components/ui/ExportButtons';
 
 export default function PackingListsPage() {
@@ -169,11 +169,16 @@ export default function PackingListsPage() {
                             className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                           />
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
+                        <td className="px-4 py-3">
                           <span className="font-mono text-sm font-medium">{row.reference}</span>
                           {row.items && row.items.length > 0 && (
-                            <div className="text-xs text-gray-400 mt-0.5 truncate max-w-[200px]" title={row.items.map(i => i.description).join(', ')}>
-                              {row.items.map(i => i.description).join(', ')}
+                            <div className="text-xs text-gray-500 mt-0.5 truncate max-w-[250px]" title={row.items.map(i => i.description).join(', ')}>
+                              {row.items.slice(0, 3).map(i => i.description).join(', ')}{row.items.length > 3 ? '…' : ''}
+                            </div>
+                          )}
+                          {row.notes && (
+                            <div className="text-xs text-gray-400 mt-0.5 truncate max-w-[250px] italic" title={row.notes}>
+                              {row.notes}
                             </div>
                           )}
                         </td>
@@ -422,6 +427,24 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
     finally { setActionLoading(false); }
   };
 
+  const downloadItemReceipt = async (itemId) => {
+    try {
+      const { data } = await api.get(`/packing-lists/${listId}/items/${itemId}/receipt`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([data]));
+      const a = document.createElement('a'); a.href = url; a.download = `receipt-item-${itemId}.pdf`; a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) { console.error(err); }
+  };
+
+  const downloadReceipt = async () => {
+    try {
+      const { data } = await api.get(`/packing-lists/${listId}/receipt`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([data]));
+      const a = document.createElement('a'); a.href = url; a.download = `packing-list-${listId}.pdf`; a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) { console.error(err); }
+  };
+
   if (loading || !pl) {
     return (
       <Modal isOpen onClose={onClose} title={t('packing_list.detail')} size="xl">
@@ -453,7 +476,12 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
           <InfoCard label={t('packing_list.items_total')} value={formatMoney(pl.total_amount)} className="text-gray-900 font-semibold" />
           <InfoCard label={t('packing_list.price_per_cbm')} value={formatMoney(pl.price_per_cbm)} />
           <InfoCard label={t('packing_list.shipping_cost')} value={formatMoney(pl.shipping_cost)} className="text-blue-600" />
-          <InfoCard label={t('packing_list.additional_fees')} value={formatMoney(pl.additional_fees)} className="text-orange-600" />
+          <InfoCard label={t('packing_list.additional_fees')} value={
+            <div>
+              <span>{formatMoney(pl.additional_fees)}</span>
+              {pl.fees_description && <div className="text-xs text-gray-500 font-normal mt-0.5">{pl.fees_description}</div>}
+            </div>
+          } className="text-orange-600" />
           <InfoCard label={t('packing_list.grand_total')} value={formatMoney(Number(pl.total_amount || 0) + Number(pl.shipping_cost || 0) + Number(pl.additional_fees || 0))} className="text-green-700 font-bold text-lg" />
         </div>
 
@@ -498,7 +526,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
                     <th className="px-3 py-2 text-right">{t('packing_list.weight')}</th>
                     <th className="px-3 py-2 text-right">{t('packing_list.total')}</th>
                     <th className="px-3 py-2 text-left">{t('packing_list.cbm_breakdown')}</th>
-                    {isDraft && <th className="px-3 py-2 text-right"></th>}
+                    <th className="px-3 py-2 text-right"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -529,9 +557,15 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
                       {isDraft && (
                         <td className="px-3 py-2 text-right">
                           <div className="flex gap-1 justify-end">
+                            <button onClick={() => downloadItemReceipt(item.id)} className="p-1 text-gray-400 hover:text-green-600" title={t('packing_list.download_receipt')}><Download className="w-3.5 h-3.5" /></button>
                             <button onClick={() => setEditItem(item)} className="p-1 text-gray-400 hover:text-blue-600"><Edit3 className="w-3.5 h-3.5" /></button>
                             <button onClick={() => handleDeleteItem(item.id)} className="p-1 text-gray-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
+                        </td>
+                      )}
+                      {!isDraft && (
+                        <td className="px-3 py-2 text-right">
+                          <button onClick={() => downloadItemReceipt(item.id)} className="p-1 text-gray-400 hover:text-green-600" title={t('packing_list.download_receipt')}><Download className="w-3.5 h-3.5" /></button>
                         </td>
                       )}
                     </tr>
@@ -544,7 +578,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
                     <td className="px-3 py-2 text-right">{Number(pl.total_weight || 0).toFixed(2)} kg</td>
                     <td className="px-3 py-2 text-right">{formatMoney(pl.total_amount)}</td>
                     <td></td>
-                    {isDraft && <td></td>}
+                    <td></td>
                   </tr>
                 </tfoot>
               </table>
@@ -560,6 +594,9 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
         {/* Action buttons */}
         <div className="flex flex-wrap justify-end gap-3 pt-2 border-t border-gray-100">
           <Button variant="secondary" onClick={onClose}>{t('common.close')}</Button>
+          <Button variant="outline" onClick={downloadReceipt}>
+            <Download className="w-4 h-4 mr-2" />{t('packing_list.download_receipt')}
+          </Button>
           {isDraft && pl.items?.length > 0 && (
             <Button variant="success" onClick={() => setShowFinalize(true)}>
               <CheckCircle className="w-4 h-4 mr-2" />{t('packing_list.finalize')}
@@ -785,7 +822,12 @@ function FinalizeModal({ packingList, onClose, onFinalize, loading }) {
 
         <div className="grid grid-cols-3 gap-4">
           <InfoCard label={t('packing_list.shipping_cost')} value={`$${shippingCost.toFixed(2)}`} className="text-blue-600 font-semibold" />
-          <InfoCard label={t('packing_list.additional_fees')} value={`$${additionalFees.toFixed(2)}`} className="text-orange-600 font-semibold" />
+          <InfoCard label={t('packing_list.additional_fees')} value={
+            <div>
+              <span>${additionalFees.toFixed(2)}</span>
+              {packingList.fees_description && <div className="text-xs text-gray-500 font-normal mt-0.5">{packingList.fees_description}</div>}
+            </div>
+          } className="text-orange-600 font-semibold" />
           <InfoCard label={t('packing_list.grand_total')} value={`$${grandTotal.toFixed(2)}`} className="text-green-700 font-bold text-lg" />
         </div>
 

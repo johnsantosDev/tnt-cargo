@@ -11,6 +11,8 @@ use App\Models\Shipment;
 use App\Models\ShipmentHistory;
 use App\Models\ShipmentStatus;
 use App\Services\AuditService;
+use App\Support\RegionContext;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,6 +22,7 @@ class PackingListController extends Controller
     {
         $query = PackingList::with(['client', 'shipment', 'creator', 'items'])
             ->withCount('items');
+        RegionContext::apply($query, $request);
 
         if ($request->filled('client_id')) {
             $query->where('client_id', $request->client_id);
@@ -77,6 +80,7 @@ class PackingListController extends Controller
             'notes' => $validated['notes'] ?? null,
             'status' => 'draft',
             'created_by' => $request->user()->id,
+            'region' => RegionContext::resolveWriteRegion($request),
         ]);
 
         if (!empty($validated['items'])) {
@@ -265,7 +269,8 @@ class PackingListController extends Controller
 
         $subtotal = $packingList->items->sum('total_price');
         $shippingCost = $packingList->shipping_cost;
-        $total = $subtotal + $shippingCost;
+        $additionalFees = $packingList->additional_fees ?? 0;
+        $total = $subtotal + $shippingCost + $additionalFees;
 
         $invoice = Invoice::create([
             'invoice_number' => Invoice::generateInvoiceNumber(),
@@ -281,6 +286,7 @@ class PackingListController extends Controller
             'due_date' => now()->addDays(30),
             'notes' => "Facture générée depuis la packing list {$packingList->reference}",
             'created_by' => $request->user()->id,
+            'region' => $packingList->region,
         ]);
 
         // Add each packing item as an invoice line
@@ -302,6 +308,20 @@ class PackingListController extends Controller
                 'quantity' => 1,
                 'unit_price' => $shippingCost,
                 'total' => $shippingCost,
+            ]);
+        }
+
+        // Add additional fees as a separate line
+        if ($additionalFees > 0) {
+            $feesLabel = $packingList->fees_description
+                ? "Frais supplémentaires: {$packingList->fees_description}"
+                : 'Frais supplémentaires';
+            InvoiceItem::create([
+                'invoice_id' => $invoice->id,
+                'description' => $feesLabel,
+                'quantity' => 1,
+                'unit_price' => $additionalFees,
+                'total' => $additionalFees,
             ]);
         }
 
@@ -356,6 +376,7 @@ class PackingListController extends Controller
             'created_by' => $request->user()->id,
             'estimated_arrival' => $validated['estimated_arrival'] ?? null,
             'special_instructions' => $validated['special_instructions'] ?? null,
+            'region' => $packingList->region,
         ]);
 
         ShipmentHistory::create([
@@ -426,6 +447,7 @@ class PackingListController extends Controller
             'created_by' => $request->user()->id,
             'estimated_arrival' => $validated['estimated_arrival'] ?? null,
             'special_instructions' => $validated['special_instructions'] ?? null,
+            'region' => $packingList->region,
         ]);
 
         ShipmentHistory::create([
@@ -518,6 +540,7 @@ class PackingListController extends Controller
             'created_by' => $request->user()->id,
             'estimated_arrival' => $validated['estimated_arrival'] ?? null,
             'special_instructions' => $validated['special_instructions'] ?? null,
+            'region' => RegionContext::resolveWriteRegion($request),
         ]);
 
         $references = $packingLists->pluck('reference')->implode(', ');
@@ -553,5 +576,32 @@ class PackingListController extends Controller
             ->get();
 
         return response()->json($packingLists);
+    }
+
+    public function downloadItemReceipt(PackingList $packingList, PackingListItem $item)
+    {
+        if ($item->packing_list_id !== $packingList->id) {
+            return response()->json(['message' => 'Article non trouvé dans cette Packing List.'], 404);
+        }
+
+        $packingList->load('client');
+
+        $pdf = Pdf::loadView('packing-lists.item-receipt', [
+            'packingList' => $packingList,
+            'item' => $item,
+        ]);
+
+        return $pdf->download("receipt-item-{$packingList->reference}-{$item->id}-" . now()->format('dmYHis') . ".pdf");
+    }
+
+    public function downloadReceipt(PackingList $packingList)
+    {
+        $packingList->load(['client', 'items', 'shipment']);
+
+        $pdf = Pdf::loadView('packing-lists.receipt', [
+            'packingList' => $packingList,
+        ]);
+
+        return $pdf->download("packing-list-{$packingList->reference}-" . now()->format('dmYHis') . ".pdf");
     }
 }

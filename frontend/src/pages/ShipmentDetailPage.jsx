@@ -24,6 +24,9 @@ export default function ShipmentDetailPage() {
   const [previewDoc, setPreviewDoc] = useState(null);
   const [packingLists, setPackingLists] = useState([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [completionNote, setCompletionNote] = useState('');
+  const [completing, setCompleting] = useState(false);
 
   const fetch = () => {
     setLoading(true);
@@ -67,6 +70,32 @@ export default function ShipmentDetailPage() {
     fetch();
   };
 
+  const handleCompleteShipment = async () => {
+    setCompleting(true);
+    try {
+      await api.post(`/shipments/${id}/complete`, { completion_note: completionNote });
+      setShowCompleteModal(false);
+      setCompletionNote('');
+      fetch();
+    } catch (err) {
+      alert(err.response?.data?.message || t('common.error'));
+    } finally {
+      setCompleting(false);
+    }
+  };
+
+  const downloadCompletionPdf = async () => {
+    try {
+      const { data } = await api.get(`/shipments/${id}/completion-pdf`, { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = `shipment-completion-${shipment.tracking_number}.pdf`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(t('common.error'));
+    }
+  };
+
 
   if (loading) return <Spinner />;
   if (!shipment) return null;
@@ -90,6 +119,16 @@ export default function ShipmentDetailPage() {
         {hasPermission('shipments.edit') && (
           <Button onClick={() => { setStatusForm({ status_id: shipment.status_id, comment: '', location: '' }); setShowStatusModal(true); }} variant="secondary">
             {t('shipments.update_status')}
+          </Button>
+        )}
+        {hasPermission('shipments.edit') && shipment.status?.slug !== 'delivered' && (
+          <Button onClick={() => setShowCompleteModal(true)} variant="primary">
+            <CheckCircle className="w-4 h-4 mr-1" /> {t('shipment_completion.complete')}
+          </Button>
+        )}
+        {shipment.completed_at && (
+          <Button onClick={downloadCompletionPdf} variant="secondary">
+            <Download className="w-4 h-4 mr-1" /> {t('shipment_completion.download_doc')}
           </Button>
         )}
       </div>
@@ -544,6 +583,27 @@ export default function ShipmentDetailPage() {
           onClose={() => setShowPaymentModal(false)}
           onSaved={() => { setShowPaymentModal(false); fetch(); }}
         />
+      )}
+
+      {showCompleteModal && (
+        <Modal isOpen title={t('shipment_completion.complete')} onClose={() => setShowCompleteModal(false)}>
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">{t('shipment_completion.warning')}</p>
+            <Textarea
+              label={t('shipment_completion.completion_note')}
+              value={completionNote}
+              onChange={(e) => setCompletionNote(e.target.value)}
+              rows={3}
+            />
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setShowCompleteModal(false)}>{t('common.cancel')}</Button>
+              <Button onClick={handleCompleteShipment} disabled={completing}>
+                <CheckCircle className="w-4 h-4 mr-1" />
+                {completing ? t('common.loading') : t('shipment_completion.confirm')}
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

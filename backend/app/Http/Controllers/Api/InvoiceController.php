@@ -7,6 +7,7 @@ use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Shipment;
 use App\Services\AuditService;
+use App\Support\RegionContext;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,6 +18,7 @@ class InvoiceController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = Invoice::with(['client', 'shipment']);
+        RegionContext::apply($query, $request);
 
         if ($request->filled('client_id')) {
             $query->where('client_id', $request->client_id);
@@ -82,6 +84,7 @@ class InvoiceController extends Controller
             'due_date' => $validated['due_date'],
             'notes' => $validated['notes'] ?? null,
             'created_by' => $request->user()->id,
+            'region' => RegionContext::resolveWriteRegion($request),
         ]);
 
         foreach ($validated['items'] as $item) {
@@ -174,6 +177,7 @@ class InvoiceController extends Controller
             'issue_date' => now(),
             'due_date' => now()->addDays(30),
             'created_by' => $request->user()->id,
+            'region' => $shipment->region,
         ]);
 
         foreach ($items as $item) {
@@ -197,7 +201,8 @@ class InvoiceController extends Controller
         $invoice->load(['client', 'items', 'shipment']);
         $pdf = Pdf::loadView('invoices.pdf', compact('invoice'));
         $clientName = str_replace(' ', '_', $invoice->client->name ?? 'client');
-        return $pdf->download("facture-{$clientName}-{$invoice->invoice_number}.pdf");
+        $timestamp = now()->format('dmYHis');
+        return $pdf->download("facture-{$clientName}-{$invoice->invoice_number}-{$timestamp}.pdf");
     }
 
     public function destroy(Request $request, Invoice $invoice): JsonResponse

@@ -214,7 +214,7 @@ function UserFormModal({ data, roles, onClose, onSaved }) {
   const [form, setForm] = useState({
     name: data?.name || '', email: data?.email || '', phone: data?.phone || '',
     password: '', password_confirmation: '', role: data?.roles?.[0]?.name || 'agent',
-    is_active: data?.is_active ?? true
+    is_active: data?.is_active ?? true, region: data?.region || ''
   });
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
 
@@ -254,6 +254,10 @@ function UserFormModal({ data, roles, onClose, onSaved }) {
             <option value="false">Inactif</option>
           </Select>
         </div>
+        <Select label={t('settings.region')} value={form.region} onChange={set('region')} error={errors.region?.[0]}>
+          <option value="">{t('dashboard.all_regions') || 'Toutes les régions'}</option>
+          {['Goma','Beni','Butembo','Lubumbashi','Kolwezi','Kinshasa','Bukavu','China','Dubai'].map(r => <option key={r} value={r}>{r}</option>)}
+        </Select>
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
           <Button type="submit" loading={loading}>{data ? t('common.save') : t('settings.add_user')}</Button>

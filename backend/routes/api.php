@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\PackingListController;
 use App\Http\Controllers\Api\ShipmentController;
+use App\Http\Controllers\Api\TransferController;
 use App\Http\Controllers\ChatMessageController;
 use Illuminate\Support\Facades\Route;
 
@@ -21,6 +22,7 @@ Route::get('/track/{trackingNumber}', [ShipmentController::class, 'track']);
 Route::get('/track/share/{shareToken}', [ShipmentController::class, 'trackByShareToken']);
 Route::get('/shipment-statuses', [ShipmentController::class, 'statuses']);
 Route::post('/chat-messages', [ChatMessageController::class, 'store']);
+Route::get('/transfers/verify/{qrToken}', [TransferController::class, 'verify']);
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -36,6 +38,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Shipments
     Route::apiResource('shipments', ShipmentController::class);
     Route::put('/shipments/{shipment}/status', [ShipmentController::class, 'updateStatus']);
+    Route::post('/shipments/{shipment}/complete', [ShipmentController::class, 'completeShipment']);
+    Route::get('/shipments/{shipment}/completion-pdf', [ShipmentController::class, 'downloadCompletionPdf']);
     Route::post('/shipments/{shipment}/documents', [ShipmentController::class, 'uploadDocuments']);
     Route::get('/shipments/documents/{document}/download', [ShipmentController::class, 'downloadDocument']);
     Route::delete('/shipments/documents/{document}', [ShipmentController::class, 'deleteDocument']);
@@ -81,6 +85,19 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/packing-lists/{packingList}/shipment-from-items', [PackingListController::class, 'createShipmentFromItems']);
     Route::post('/packing-lists/create-shipment-from-lists', [PackingListController::class, 'createShipmentFromLists']);
     Route::get('/shipments/{shipment}/packing-lists', [PackingListController::class, 'getByShipment']);
+    Route::get('/packing-lists/{packingList}/items/{item}/receipt', [PackingListController::class, 'downloadItemReceipt']);
+    Route::get('/packing-lists/{packingList}/receipt', [PackingListController::class, 'downloadReceipt']);
+
+    // Transfers (Procurement)
+    Route::apiResource('transfers', TransferController::class)->only(['index', 'store', 'show']);
+    Route::post('/transfers/{transfer}/approve', [TransferController::class, 'approve']);
+    Route::post('/transfers/{transfer}/reject', [TransferController::class, 'reject']);
+    Route::post('/transfers/{transfer}/complete', [TransferController::class, 'complete']);
+    Route::get('/transfers/{transfer}/receipt', [TransferController::class, 'downloadReceipt']);
+    Route::get('/transfers/{transfer}/completion-pdf', [TransferController::class, 'downloadCompletion']);
+    Route::get('/transfers/{transfer}/document', [TransferController::class, 'downloadDocument']);
+    Route::post('/transfers/{transfer}/signed-document', [TransferController::class, 'uploadSignedDocument']);
+    Route::get('/transfers/{transfer}/signed-document', [TransferController::class, 'downloadSignedDocument']);
 
     // Reports
     Route::prefix('reports')->group(function () {
@@ -89,6 +106,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/debts', [ReportController::class, 'debts']);
         Route::get('/cash-advances', [ReportController::class, 'cashAdvances']);
         Route::get('/flight-tickets', [ReportController::class, 'flightTickets']);
+        Route::get('/transfers', [ReportController::class, 'transfers']);
+        Route::get('/containers', [ReportController::class, 'containers']);
     });
 
     // Settings (admin only)

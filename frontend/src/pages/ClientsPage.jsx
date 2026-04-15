@@ -47,7 +47,7 @@ export default function ClientsPage() {
 
   const columns = [
     { key: 'name', label: t('clients.name'), render: (row) => <span className="font-medium">{row.name}</span> },
-    { key: 'phone', label: t('clients.phone') },
+    { key: 'phone', label: t('clients.phone'), render: (row) => <span>{row.phone_code || '+243'} {row.phone}</span> },
     { key: 'email', label: t('clients.email'), render: (row) => row.email || '-' },
     { key: 'company', label: t('clients.company'), render: (row) => row.company || '-' },
     { key: 'type', label: t('clients.type'), render: (row) => typeBadge(row.type) },
@@ -114,7 +114,7 @@ function ClientFormModal({ data, onClose, onSaved }) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [form, setForm] = useState({
-    name: data?.name || '', email: data?.email || '', phone: data?.phone || '',
+    name: data?.name || '', email: data?.email || '', phone: data?.phone || '', phone_code: data?.phone_code || '+243',
     company: data?.company || '', type: data?.type || 'new', address: data?.address || '', notes: data?.notes || ''
   });
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
@@ -137,7 +137,24 @@ function ClientFormModal({ data, onClose, onSaved }) {
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input label={t('clients.name')} value={form.name} onChange={set('name')} error={errors.name?.[0]} required />
         <div className="grid grid-cols-2 gap-4">
-          <Input label={t('clients.phone')} value={form.phone} onChange={set('phone')} error={errors.phone?.[0]} required />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('clients.phone')}</label>
+            <div className="flex gap-1">
+              <select value={form.phone_code || '+243'} onChange={(e) => setForm(f => ({ ...f, phone_code: e.target.value }))}
+                className="w-24 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500">
+                <option value="+243">+243</option>
+                <option value="+86">+86</option>
+                <option value="+971">+971</option>
+                <option value="+90">+90</option>
+                <option value="+1">+1</option>
+                <option value="+33">+33</option>
+                <option value="+32">+32</option>
+              </select>
+              <input type="text" value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+            </div>
+            {errors.phone?.[0] && <p className="text-xs text-red-500 mt-1">{errors.phone[0]}</p>}
+          </div>
           <Input label={t('clients.email')} type="email" value={form.email} onChange={set('email')} error={errors.email?.[0]} />
         </div>
         <div className="grid grid-cols-2 gap-4">
@@ -167,7 +184,7 @@ function ClientDetailModal({ client, onClose }) {
   return (
     <Modal isOpen onClose={onClose} title={client.name}>
       <div className="space-y-1">
-        {row(t('clients.phone'), client.phone)}
+        {row(t('clients.phone'), `${client.phone_code || '+243'} ${client.phone}`)}
         {row(t('clients.email'), client.email || '-')}
         {row(t('clients.company'), client.company || '-')}
         {row(t('clients.type'), client.type?.toUpperCase())}

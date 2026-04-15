@@ -16,21 +16,27 @@ import {
 
 const COLORS = ['#6366F1', '#F59E0B', '#3B82F6', '#EF4444', '#10B981', '#059669'];
 
+const REGIONS = ['Goma', 'Beni', 'Butembo', 'Lubumbashi', 'Kolwezi', 'Kinshasa', 'Bukavu', 'China', 'Dubai'];
+
 export default function DashboardPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
+  const isManager = hasRole('admin') || hasRole('manager');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('month');
+  const [region, setRegion] = useState('');
 
   useEffect(() => {
     setLoading(true);
-    api.get(`/dashboard?period=${period}`)
+    const params = new URLSearchParams({ period });
+    if (region) params.append('region', region);
+    api.get(`/dashboard?${params.toString()}`)
       .then(({ data }) => setData(data))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [period]);
+  }, [period, region]);
 
   if (loading) return <div className="flex items-center justify-center h-64"><Spinner /></div>;
   if (!data) return null;
@@ -56,16 +62,25 @@ export default function DashboardPage() {
           </h1>
           <p className="text-sm text-gray-500">{t('dashboard.welcome_desc')}</p>
         </div>
-        <div className="flex gap-1 bg-white rounded-lg p-1 shadow-xs border border-gray-200 mt-4 sm:mt-0">
-          {['week', 'month', 'year'].map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${period === p ? 'bg-gray-900 text-white font-medium shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              {t(`dashboard.${p}`)}
-            </button>
-          ))}
+        <div className="flex flex-wrap gap-2 mt-4 sm:mt-0 items-center">
+          {isManager && (
+            <select value={region} onChange={(e) => setRegion(e.target.value)}
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500">
+              <option value="">{t('dashboard.all_regions')}</option>
+              {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          )}
+          <div className="flex gap-1 bg-white rounded-lg p-1 shadow-xs border border-gray-200">
+            {['day', 'week', 'month', 'year'].map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${period === p ? 'bg-gray-900 text-white font-medium shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                {t(`dashboard.${p}`)}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -100,6 +115,21 @@ export default function DashboardPage() {
           <KPICard title={t('dashboard.pending_advances')} value={formatMoney(kpis.pending_cash_advances)} icon={Banknote} color="purple" />
         </div>
       </div>
+
+      {/* Daily Stats */}
+      {data.daily && (
+        <div className="grid grid-cols-12 gap-6">
+          <div className="col-span-12 sm:col-span-4">
+            <KPICard title={t('dashboard.today_revenue')} value={formatMoney(data.daily.revenue)} icon={DollarSign} color="green" />
+          </div>
+          <div className="col-span-12 sm:col-span-4">
+            <KPICard title={t('dashboard.today_expenses')} value={formatMoney(data.daily.expenses)} icon={CreditCard} color="red" />
+          </div>
+          <div className="col-span-12 sm:col-span-4">
+            <KPICard title={t('dashboard.today_shipments')} value={data.daily.shipments} icon={Package} color="blue" />
+          </div>
+        </div>
+      )}
 
       {/* Charts */}
       <div className="grid grid-cols-12 gap-6">

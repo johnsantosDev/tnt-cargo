@@ -14,6 +14,7 @@ class Payment extends Model
         'reference', 'shipment_id', 'client_id', 'amount', 'currency',
         'method', 'type', 'status', 'notes', 'payment_date',
         'received_by', 'created_by', 'bank_reference', 'proof_path', 'proof_type',
+        'region',
     ];
 
     protected function casts(): array

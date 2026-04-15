@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\RegionContext;
 use App\Models\Payment;
 use App\Models\Shipment;
 use App\Services\AuditService;
@@ -15,6 +16,7 @@ class PaymentController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = Payment::with(['client', 'shipment', 'receiver']);
+        RegionContext::apply($query, $request);
 
         if ($request->filled('client_id')) {
             $query->where('client_id', $request->client_id);
@@ -76,6 +78,7 @@ class PaymentController extends Controller
         $validated['reference'] = Payment::generateReference();
         $validated['received_by'] = $request->user()->id;
         $validated['created_by'] = $request->user()->id;
+        $validated['region'] = RegionContext::resolveWriteRegion($request);
         $validated['status'] = $validated['status'] ?? 'completed';
 
         $payment = Payment::create($validated);
@@ -144,7 +147,8 @@ class PaymentController extends Controller
         $payment->load(['client', 'shipment', 'receiver', 'creator']);
         $pdf = Pdf::loadView('payments.pdf', compact('payment'));
         $clientName = str_replace(' ', '_', $payment->client->name ?? 'client');
-        return $pdf->download("recu-{$clientName}-{$payment->reference}.pdf");
+        $timestamp = now()->format('dmYHis');
+        return $pdf->download("recu-{$clientName}-{$payment->reference}-{$timestamp}.pdf");
     }
 
     public function downloadProof(Payment $payment)

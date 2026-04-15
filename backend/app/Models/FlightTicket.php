@@ -21,7 +21,7 @@ class FlightTicket extends Model
         'ticket_price', 'service_fee', 'taxes', 'total_price',
         'amount_paid', 'balance_due', 'currency',
         'status', 'payment_method', 'payment_proof_path', 'ticket_file_path',
-        'notes', 'created_by',
+        'notes', 'created_by', 'region',
     ];
 
     protected function casts(): array

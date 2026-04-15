@@ -11,10 +11,10 @@ class Client extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'name', 'email', 'phone', 'phone_secondary', 'company',
+        'name', 'email', 'phone', 'phone_code', 'phone_secondary', 'company',
         'address', 'city', 'country', 'type', 'notes',
         'total_spent', 'total_debt', 'shipment_count',
-        'is_active', 'created_by',
+        'is_active', 'created_by', 'region',
     ];
 
     protected function casts(): array

@@ -14,7 +14,7 @@ class Invoice extends Model
         'invoice_number', 'client_id', 'shipment_id',
         'subtotal', 'tax_amount', 'discount_amount', 'total',
         'amount_paid', 'currency', 'status',
-        'issue_date', 'due_date', 'paid_date', 'notes', 'created_by',
+        'issue_date', 'due_date', 'paid_date', 'notes', 'created_by', 'region',
     ];
 
     protected function casts(): array

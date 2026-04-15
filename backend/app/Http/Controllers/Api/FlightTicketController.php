@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\RegionContext;
 use App\Models\FlightTicket;
 use App\Services\AuditService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -15,6 +16,7 @@ class FlightTicketController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = FlightTicket::with(['client', 'creator']);
+        RegionContext::apply($query, $request);
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
@@ -109,6 +111,7 @@ class FlightTicketController extends Controller
             'currency' => $validated['currency'] ?? 'USD',
             'status' => $status,
             'created_by' => $request->user()->id,
+            'region' => RegionContext::resolveWriteRegion($request),
         ]);
 
         AuditService::log('created', $ticket, null, $ticket->toArray());
@@ -223,7 +226,8 @@ class FlightTicketController extends Controller
         $flightTicket->load(['client', 'creator']);
         $pdf = Pdf::loadView('flight-tickets.receipt', compact('flightTicket'));
         $passengerName = str_replace(' ', '_', $flightTicket->passenger_name);
-        return $pdf->download("receipt-{$passengerName}-{$flightTicket->ticket_number}.pdf");
+        $timestamp = now()->format('dmYHis');
+        return $pdf->download("receipt-{$passengerName}-{$flightTicket->ticket_number}-{$timestamp}.pdf");
     }
 
     public function downloadProof(FlightTicket $flightTicket)
@@ -242,12 +246,15 @@ class FlightTicketController extends Controller
         return Storage::disk('public')->download($flightTicket->ticket_file_path);
     }
 
-    public function stats(): JsonResponse
+    public function stats(Request $request): JsonResponse
     {
-        $totalSales = FlightTicket::whereNotIn('status', ['cancelled', 'refunded'])->sum('total_price');
-        $totalCollected = FlightTicket::whereNotIn('status', ['cancelled', 'refunded'])->sum('amount_paid');
-        $totalTickets = FlightTicket::whereNotIn('status', ['cancelled', 'refunded'])->count();
-        $pendingPayments = FlightTicket::whereNotIn('status', ['cancelled', 'refunded'])->sum('balance_due');
+        $base = FlightTicket::whereNotIn('status', ['cancelled', 'refunded']);
+        RegionContext::apply($base, $request);
+
+        $totalSales = (clone $base)->sum('total_price');
+        $totalCollected = (clone $base)->sum('amount_paid');
+        $totalTickets = (clone $base)->count();
+        $pendingPayments = (clone $base)->sum('balance_due');
 
         return response()->json([
             'total_sales' => $totalSales,

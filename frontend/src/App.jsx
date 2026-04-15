@@ -22,6 +22,7 @@ const CurrencyPage = lazy(() => import('./pages/CurrencyPage'));
 const SearchPage = lazy(() => import('./pages/SearchPage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const TrackingPage = lazy(() => import('./pages/TrackingPage'));
+const TransfersPage = lazy(() => import('./pages/TransfersPage'));
 
 function PageLoader() {
   return (
@@ -75,8 +76,7 @@ export default function App() {
               <Route path="cash-advances" element={<CashAdvancesPage />} />
               <Route path="invoices" element={<InvoicesPage />} />
               <Route path="flight-tickets" element={<FlightTicketsPage />} />
-              <Route path="packing-lists" element={<PackingListsPage />} />
-              <Route path="reports" element={<ReportsPage />} />
+              <Route path="packing-lists" element={<PackingListsPage />} />                <Route path="transfers" element={<TransfersPage />} />              <Route path="reports" element={<ReportsPage />} />
               <Route path="currency" element={<CurrencyPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="search" element={<SearchPage />} />

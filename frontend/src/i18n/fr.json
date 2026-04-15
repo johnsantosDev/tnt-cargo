@@ -8,14 +8,15 @@
     "expenses": "Dépenses",
     "cash_advances": "Cash Advance",
     "invoices": "Factures",
-    "packing_lists": "Listes de Colisage",
+    "packing_lists": "Packing List",
     "flight_tickets": "Billets d'avion",
     "reports": "Rapports",
     "currency": "Devises",
     "settings": "Paramètres",
     "tracking": "Suivi",
     "logout": "Déconnexion",
-    "profile": "Profil"
+    "profile": "Profil",
+    "transfers": "Transferts"
   },
   "auth": {
     "login": "Connexion",
@@ -54,7 +55,13 @@
     "period": "Période",
     "week": "Semaine",
     "month": "Mois",
-    "year": "Année"
+    "year": "Année",
+    "day": "Jour",
+    "today_revenue": "Revenus aujourd'hui",
+    "today_expenses": "Dépenses aujourd'hui",
+    "today_shipments": "Expéditions aujourd'hui",
+    "region": "Région",
+    "all_regions": "Toutes les régions"
   },
   "tracking": {
     "title": "Suivre votre colis",
@@ -259,7 +266,8 @@
     "shipments": "Expéditions",
     "search": "Rechercher un client...",
     "search_placeholder": "Rechercher par nom, téléphone...",
-    "no_clients": "Aucun client trouvé"
+    "no_clients": "Aucun client trouvé",
+    "phone_code": "Indicatif"
   },
   "payments": {
     "title": "Paiements",
@@ -427,7 +435,13 @@
     "ft_sales_trend": "Tendance des ventes",
     "ft_by_airline": "Par compagnie aérienne",
     "ft_by_route": "Par itinéraire",
-    "ft_recent_tickets": "Billets récents"
+    "ft_recent_tickets": "Billets récents",
+    "transfers": "Transferts",
+    "containers": "Conteneurs",
+    "total_containers": "Total conteneurs",
+    "container_profit": "Profit conteneur",
+    "region": "Région",
+    "all_regions": "Toutes les régions"
   },
   "settings": {
     "title": "Paramètres",
@@ -461,7 +475,8 @@
     "change_password": "Changer le mot de passe",
     "current_password": "Mot de passe actuel",
     "new_password": "Nouveau mot de passe",
-    "password_changed": "Mot de passe modifié avec succès."
+    "password_changed": "Mot de passe modifié avec succès.",
+    "region": "Région"
   },
   "common": {
     "save": "Enregistrer",
@@ -511,7 +526,7 @@
     "api_error": "Impossible de récupérer les taux en direct. Taux estimés utilisés."
   },
   "packing_list": {
-    "title": "Listes de Colisage",
+    "title": "Packing List",
     "create": "Nouvelle Liste",
     "detail": "Détails de la Liste",
     "reference": "Référence",
@@ -557,6 +572,7 @@
     "generate_invoice": "Générer la facture",
     "invoice_generated": "Facture générée",
     "confirm_delete_item": "Êtes-vous sûr de vouloir supprimer cet article ?",
+    "download_receipt": "Télécharger le reçu",
     "confirm_delete": "Êtes-vous sûr de vouloir supprimer cette liste de colisage ?",
     "edit_details": "Modifier les détails",
     "link_shipment": "Lier à une expédition (optionnel)",
@@ -655,5 +671,63 @@
     "other_client": "Client non listé...",
     "custom_client_placeholder": "Nom du client",
     "search_client": "Rechercher un client..."
+  },
+  "transfers": {
+    "title": "Transferts",
+    "create": "Nouveau transfert",
+    "reference": "Référence",
+    "transfer_code": "Code transfert",
+    "client": "Client",
+    "client_name": "Nom du client",
+    "client_phone": "Téléphone",
+    "amount": "Montant",
+    "currency": "Devise",
+    "origin_region": "Région d'origine",
+    "destination_region": "Région de destination",
+    "status": "Statut",
+    "status_pending": "En attente d'approbation",
+    "status_approved": "Approuvé",
+    "status_rejected": "Rejeté",
+    "status_completed": "Terminé",
+    "status_cancelled": "Annulé",
+    "approve": "Approuver",
+    "reject": "Rejeter",
+    "complete": "Terminer",
+    "receipt": "Reçu",
+    "completion_doc": "Document de fin",
+    "verify": "Vérifier",
+    "notes": "Notes",
+    "no_transfers": "Aucun transfert trouvé",
+    "search_placeholder": "Rechercher par référence, client...",
+    "all_statuses": "Tous les statuts",
+    "qr_code": "QR Code",
+    "approved_by": "Approuvé par",
+    "completed_by": "Complété par",
+    "created_at": "Créé le",
+    "confirm_approve": "Confirmer l'approbation de ce transfert ?",
+    "confirm_reject": "Confirmer le rejet de ce transfert ?",
+    "confirm_complete": "Confirmer la finalisation de ce transfert ?",
+    "complete_transfer": "Compléter le Transfert",
+    "confirm_complete_title": "Confirmer la remise des fonds",
+    "confirm_complete_desc": "En complétant ce transfert, vous confirmez que le client a reçu les fonds à destination. Un accusé de réception sera généré pour signature.",
+    "completion_notes": "Notes de finalisation (optionnel)",
+    "completion_notes_placeholder": "Ajoutez des notes sur la remise des fonds...",
+    "confirm_complete_btn": "Confirmer la Complétion",
+    "search_client_placeholder": "Rechercher un client...",
+    "document": "Document (PDF, Image)",
+    "document_attached": "Document attaché",
+    "signed_document": "Document signé",
+    "upload_signed": "Téléverser le document signé",
+    "upload_signed_desc": "Téléversez la copie signée du document de finalisation par le client.",
+    "signed_uploaded": "Document signé téléversé",
+    "download_signed": "Télécharger le document signé"
+  },
+  "shipment_completion": {
+    "complete": "Finaliser l'expédition",
+    "completion_note": "Note de finalisation",
+    "confirm": "Confirmer la finalisation",
+    "warning": "Cette action marquera l'expédition comme livrée et générera un document de retrait.",
+    "download_doc": "Télécharger le document de retrait",
+    "completed": "Expédition finalisée"
   }
 }

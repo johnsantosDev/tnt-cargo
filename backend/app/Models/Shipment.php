@@ -30,7 +30,8 @@ class Shipment extends Model
         'warehouse_days', 'warehouse_daily_rate',
         'special_instructions', 'is_fragile', 'is_insured', 'insurance_amount',
         'receiver_name', 'receiver_phone', 'delivery_address',
-        'assigned_to', 'created_by',
+        'assigned_to', 'created_by', 'region',
+        'completed_at', 'completed_by', 'completion_note',
     ];
 
     protected function casts(): array
@@ -54,6 +55,7 @@ class Shipment extends Model
             'warehouse_exit_date' => 'date',
             'is_fragile' => 'boolean',
             'is_insured' => 'boolean',
+            'completed_at' => 'datetime',
         ];
     }
 

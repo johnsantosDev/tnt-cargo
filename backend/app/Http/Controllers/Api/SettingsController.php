@@ -133,17 +133,18 @@ class SettingsController extends Controller
             'phone' => 'nullable|string|max:20',
             'role' => 'required|exists:roles,name',
             'locale' => 'nullable|in:fr,en',
-        ]);
+        'region' => 'nullable|string|max:100',
+    ]);
 
-        $user = User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => $validated['password'],
-            'phone' => $validated['phone'] ?? null,
-            'locale' => $validated['locale'] ?? 'fr',
-        ]);
-
-        $user->assignRole($validated['role']);
+    $user = User::create([
+        'name' => $validated['name'],
+        'email' => $validated['email'],
+        'password' => $validated['password'],
+        'phone' => $validated['phone'] ?? null,
+        'locale' => $validated['locale'] ?? 'fr',
+        'region' => $validated['region'] ?? null,
+    ]);
+    $user->assignRole($validated['role']);
 
         AuditService::log('created', $user, null, $user->toArray());
 
@@ -166,6 +167,7 @@ class SettingsController extends Controller
             'role' => 'sometimes|exists:roles,name',
             'is_active' => 'sometimes|boolean',
             'locale' => 'nullable|in:fr,en',
+            'region' => 'nullable|string|max:100',
         ]);
 
         if (isset($validated['role'])) {

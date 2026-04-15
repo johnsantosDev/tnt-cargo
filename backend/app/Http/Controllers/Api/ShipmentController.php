@@ -8,6 +8,8 @@ use App\Models\ShipmentDocument;
 use App\Models\ShipmentHistory;
 use App\Models\ShipmentStatus;
 use App\Services\AuditService;
+use App\Support\RegionContext;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -17,6 +19,7 @@ class ShipmentController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = Shipment::with(['client', 'status', 'assignedUser']);
+        RegionContext::apply($query, $request);
 
         if ($request->filled('status')) {
             $query->whereHas('status', fn($q) => $q->where('slug', $request->status));
@@ -87,6 +90,7 @@ class ShipmentController extends Controller
         $validated['status_id'] = $defaultStatus?->id ?? 1;
         $validated['created_by'] = $request->user()->id;
         $validated['destination'] = $validated['destination'] ?? 'Goma';
+        $validated['region'] = RegionContext::resolveWriteRegion($request);
 
         $shipment = Shipment::create($validated);
         $shipment->calculateTotalCost();
@@ -217,6 +221,53 @@ class ShipmentController extends Controller
         $shipment->delete();
 
         return response()->json(['message' => 'Expédition supprimée.']);
+    }
+
+    public function completeShipment(Request $request, Shipment $shipment): JsonResponse
+    {
+        $validated = $request->validate([
+            'completion_note' => 'nullable|string',
+        ]);
+
+        $deliveredStatus = ShipmentStatus::where('slug', 'delivered')->first();
+        if ($deliveredStatus) {
+            $shipment->status_id = $deliveredStatus->id;
+        }
+
+        $shipment->update([
+            'status_id' => $shipment->status_id,
+            'completed_at' => now(),
+            'completed_by' => $request->user()->id,
+            'completion_note' => $validated['completion_note'] ?? null,
+        ]);
+
+        ShipmentHistory::create([
+            'shipment_id' => $shipment->id,
+            'status_id' => $shipment->status_id,
+            'changed_by' => $request->user()->id,
+            'comment' => 'Expédition complétée — Colis retiré par le client',
+        ]);
+
+        AuditService::log('completed', $shipment, ['completed_at' => null], ['completed_at' => now()->toDateTimeString()]);
+
+        return response()->json([
+            'message' => 'Expédition complétée avec succès.',
+            'shipment' => $shipment->load(['client', 'status']),
+        ]);
+    }
+
+    public function downloadCompletionPdf(Shipment $shipment)
+    {
+        $shipment->load(['client', 'status', 'history.status', 'creator', 'payments']);
+
+        $packingItems = \App\Models\PackingListItem::whereHas('packingList', function ($q) use ($shipment) {
+            $q->where('shipment_id', $shipment->id);
+        })->with('packingList')->get();
+
+        $pdf = Pdf::loadView('shipments.completion', compact('shipment', 'packingItems'));
+        $clientName = str_replace(' ', '_', $shipment->client->name ?? 'client');
+        $timestamp = now()->format('dmYHis');
+        return $pdf->download("completion-{$clientName}-{$shipment->tracking_number}-{$timestamp}.pdf");
     }
 
     public function uploadDocuments(Request $request, Shipment $shipment): JsonResponse

@@ -14,7 +14,7 @@ class PackingList extends Model
         'reference', 'client_id', 'shipment_id', 'status',
         'total_cbm', 'total_weight', 'total_amount',
         'price_per_cbm', 'shipping_cost', 'additional_fees', 'fees_description',
-        'notes', 'created_by', 'finalized_at',
+        'notes', 'created_by', 'finalized_at', 'region',
     ];
 
     protected function casts(): array

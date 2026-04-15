@@ -1,23 +1,28 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { Card, CardHeader, CardBody, Button, Select, Spinner, Input } from '../components/ui';
-import { Download, TrendingUp, Package, AlertTriangle, Banknote, FileText, FileSpreadsheet, Calendar, Plane } from 'lucide-react';
+import { Download, TrendingUp, Package, AlertTriangle, Banknote, FileText, FileSpreadsheet, Calendar, Plane, ArrowRightLeft, Container } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend
 } from 'recharts';
 
 const COLORS = ['#6366F1', '#F59E0B', '#3B82F6', '#EF4444', '#10B981', '#8B5CF6'];
+const REGIONS = ['Goma', 'Beni', 'Butembo', 'Lubumbashi', 'Kolwezi', 'Kinshasa', 'Bukavu', 'China', 'Dubai'];
 
 export default function ReportsPage() {
   const { t } = useTranslation();
+  const { hasRole } = useAuth();
+  const isManager = hasRole('admin') || hasRole('manager');
   const [activeTab, setActiveTab] = useState('financial');
   const [period, setPeriod] = useState('month');
   const [groupBy, setGroupBy] = useState('daily');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [useCustomDates, setUseCustomDates] = useState(false);
+  const [region, setRegion] = useState('');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -26,11 +31,12 @@ export default function ReportsPage() {
     const params = useCustomDates && startDate && endDate
       ? { start_date: startDate, end_date: endDate, group_by: groupBy }
       : { period, group_by: groupBy };
+    if (region) params.region = region;
     api.get(`/reports/${activeTab}`, { params })
       .then(({ data }) => setData(data))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [activeTab, period, groupBy, startDate, endDate, useCustomDates]);
+  }, [activeTab, period, groupBy, startDate, endDate, useCustomDates, region]);
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
@@ -41,7 +47,9 @@ export default function ReportsPage() {
     { key: 'shipments', label: t('reports.shipments'), icon: Package },
     { key: 'debts', label: t('reports.debts'), icon: AlertTriangle },
     { key: 'cash-advances', label: t('reports.cash_advances'), icon: Banknote },
-    { key: 'flight-tickets', label: t('reports.flight_tickets'), icon: Plane }
+    { key: 'flight-tickets', label: t('reports.flight_tickets'), icon: Plane },
+    { key: 'transfers', label: t('reports.transfers'), icon: ArrowRightLeft },
+    { key: 'containers', label: t('reports.containers'), icon: Package }
   ];
 
   const handleExport = async (format) => {
@@ -49,6 +57,7 @@ export default function ReportsPage() {
       const params = useCustomDates && startDate && endDate
         ? { start_date: startDate, end_date: endDate, export: format }
         : { period, export: format };
+      if (region) params.region = region;
       const response = await api.get(`/reports/${activeTab}`, { params, responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
@@ -68,6 +77,12 @@ export default function ReportsPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-gray-900">{t('reports.title')}</h1>
         <div className="flex flex-wrap items-center gap-2">
+          {isManager && (
+            <Select value={region} onChange={(e) => setRegion(e.target.value)}>
+              <option value="">{t('reports.all_regions')}</option>
+              {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </Select>
+          )}
           {!useCustomDates && (
             <Select value={period} onChange={(e) => setPeriod(e.target.value)}>
               <option value="week">{t('dashboard.week')}</option>
@@ -138,6 +153,8 @@ export default function ReportsPage() {
           {activeTab === 'debts' && <DebtsReport data={data} formatMoney={formatMoney} t={t} />}
           {activeTab === 'cash-advances' && <CashAdvancesReport data={data} formatMoney={formatMoney} t={t} />}
           {activeTab === 'flight-tickets' && <FlightTicketsReport data={data} formatMoney={formatMoney} t={t} />}
+          {activeTab === 'transfers' && <TransfersReport data={data} formatMoney={formatMoney} t={t} />}
+          {activeTab === 'containers' && <ContainersReport data={data} formatMoney={formatMoney} t={t} />}
         </>
       )}
     </div>
@@ -366,6 +383,135 @@ function FlightTicketsReport({ data, formatMoney, t }) {
               </div>
             ))}
           </div>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
+function TransfersReport({ data, formatMoney, t }) {
+  if (!data) return null;
+  const { summary, by_status, by_region, trend } = data;
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {[
+          { label: t('reports.total_revenue'), value: formatMoney(summary?.total_amount), color: 'text-green-600' },
+          { label: t('common.total'), value: summary?.total_count, color: 'text-blue-600' },
+          { label: t('transfers.status_completed'), value: summary?.completed, color: 'text-emerald-600' },
+          { label: t('transfers.status_pending'), value: summary?.pending, color: 'text-yellow-600' },
+          { label: t('transfers.status_approved'), value: summary?.approved, color: 'text-indigo-600' },
+        ].map((item, i) => (
+          <Card key={i}><CardBody className="text-center"><p className="text-sm text-gray-500">{item.label}</p><p className={`text-2xl font-bold mt-1 ${item.color}`}>{item.value}</p></CardBody></Card>
+        ))}
+      </div>
+      {trend?.length > 0 && (
+        <Card>
+          <CardHeader><h3 className="font-semibold">{t('reports.transfers')}</h3></CardHeader>
+          <CardBody>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={trend}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip formatter={(v) => formatMoney(v)} />
+                <Bar dataKey="total" fill="#6366F1" radius={[6, 6, 0, 0]} name={t('reports.total_revenue')} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardBody>
+        </Card>
+      )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {by_status?.length > 0 && (
+          <Card>
+            <CardHeader><h3 className="font-semibold">{t('reports.by_status')}</h3></CardHeader>
+            <CardBody className="p-0">
+              <div className="divide-y">
+                {by_status.map((s, i) => (
+                  <div key={i} className="px-6 py-3 flex items-center justify-between">
+                    <span className="text-sm font-medium capitalize">{s.status?.replace('_', ' ')}</span>
+                    <div className="text-right">
+                      <span className="text-sm text-gray-600">{s.count} — </span>
+                      <span className="text-sm font-bold">{formatMoney(s.total)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardBody>
+          </Card>
+        )}
+        {by_region?.length > 0 && (
+          <Card>
+            <CardHeader><h3 className="font-semibold">{t('reports.region')}</h3></CardHeader>
+            <CardBody className="p-0">
+              <div className="divide-y">
+                {by_region.map((r, i) => (
+                  <div key={i} className="px-6 py-3 flex items-center justify-between">
+                    <span className="text-sm font-medium">{r.region}</span>
+                    <div className="text-right">
+                      <span className="text-sm text-gray-600">{r.count} — </span>
+                      <span className="text-sm font-bold">{formatMoney(r.total)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardBody>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ContainersReport({ data, formatMoney, t }) {
+  if (!data) return null;
+  const { summary, containers } = data;
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: t('reports.total_containers'), value: summary?.total_containers, color: 'text-blue-600' },
+          { label: t('reports.total_revenue'), value: formatMoney(summary?.total_revenue), color: 'text-green-600' },
+          { label: t('reports.total_expenses'), value: formatMoney(summary?.total_expenses), color: 'text-red-600' },
+          { label: t('reports.net_profit'), value: formatMoney(summary?.total_profit), color: 'text-purple-600' },
+        ].map((item, i) => (
+          <Card key={i}><CardBody className="text-center"><p className="text-sm text-gray-500">{item.label}</p><p className={`text-2xl font-bold mt-1 ${item.color}`}>{item.value}</p></CardBody></Card>
+        ))}
+      </div>
+      <Card>
+        <CardHeader><h3 className="font-semibold">{t('reports.containers')}</h3></CardHeader>
+        <CardBody className="p-0 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b">
+              <tr>
+                <th className="text-left px-5 py-3 font-medium text-gray-500">{t('shipments.container_code')}</th>
+                <th className="text-right px-5 py-3 font-medium text-gray-500">{t('reports.total_shipments')}</th>
+                <th className="text-right px-5 py-3 font-medium text-gray-500">{t('reports.total_revenue')}</th>
+                <th className="text-right px-5 py-3 font-medium text-gray-500">{t('reports.total_expenses')}</th>
+                <th className="text-right px-5 py-3 font-medium text-gray-500">{t('reports.net_profit')}</th>
+                <th className="text-right px-5 py-3 font-medium text-gray-500">{t('reports.margin')}</th>
+                <th className="text-right px-5 py-3 font-medium text-gray-500">{t('shipments.weight')}</th>
+                <th className="text-right px-5 py-3 font-medium text-gray-500">{t('shipments.cbm')}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {(containers || []).map((c, i) => (
+                <tr key={i} className="hover:bg-gray-50">
+                  <td className="px-5 py-3 font-medium">{c.container_number}</td>
+                  <td className="px-5 py-3 text-right">{c.shipment_count}</td>
+                  <td className="px-5 py-3 text-right text-green-600 font-medium">{formatMoney(c.revenue)}</td>
+                  <td className="px-5 py-3 text-right text-red-600">{formatMoney(c.expenses)}</td>
+                  <td className="px-5 py-3 text-right font-bold">{formatMoney(c.profit)}</td>
+                  <td className="px-5 py-3 text-right">{c.margin}%</td>
+                  <td className="px-5 py-3 text-right">{Number(c.total_weight || 0).toLocaleString()}</td>
+                  <td className="px-5 py-3 text-right">{Number(c.total_cbm || 0).toFixed(2)}</td>
+                </tr>
+              ))}
+              {(!containers || containers.length === 0) && (
+                <tr><td colSpan={8} className="px-5 py-8 text-center text-gray-400">{t('common.no_data')}</td></tr>
+              )}
+            </tbody>
+          </table>
         </CardBody>
       </Card>
     </div>

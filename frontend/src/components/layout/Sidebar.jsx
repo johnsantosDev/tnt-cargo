@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import {
   LayoutDashboard, Package, Users, CreditCard, Receipt,
   Banknote, FileText, BarChart3, Settings, LogOut,
-  Menu, X, ChevronLeft, ChevronRight, Coins, Box, Plane
+  Menu, X, ChevronLeft, ChevronRight, Coins, Box, Plane, ArrowRightLeft
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 
@@ -18,6 +18,7 @@ const navItems = [
   { key: 'invoices', path: '/dashboard/invoices', icon: FileText, permission: 'view_invoices' },
   { key: 'flight_tickets', path: '/dashboard/flight-tickets', icon: Plane, permission: 'view_invoices' },
   { key: 'packing_lists', path: '/dashboard/packing-lists', icon: Box, permission: 'view_invoices' },
+  { key: 'transfers', path: '/dashboard/transfers', icon: ArrowRightLeft, permission: 'view_payments' },
   { key: 'reports', path: '/dashboard/reports', icon: BarChart3, permission: 'view_reports' },
   { key: 'currency', path: '/dashboard/currency', icon: Coins },
   { key: 'settings', path: '/dashboard/settings', icon: Settings },
