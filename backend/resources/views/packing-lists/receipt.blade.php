@@ -179,7 +179,7 @@
     {{-- Footer --}}
     <div class="footer">
         <div class="footer-brand">TNT Cargo System</div>
-        <div>Logistique internationale — RDC — contact@tntcargo.com</div>
+        <div>Logistique internationale — RDC — contact@agencetntcargo.com</div>
         <div>Packing List {{ $packingList->reference }} — Généré le {{ now()->format('d/m/Y à H:i') }}</div>
     </div>
 </div>

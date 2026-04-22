@@ -25,6 +25,9 @@ function DashboardContent() {
               <Outlet />
             </div>
           </main>
+          <div className="shrink-0 px-4 sm:px-6 lg:px-8 py-2 text-right">
+            <span className="text-[11px] text-gray-400 dark:text-gray-600">Powered by <span className="font-medium text-gray-500 dark:text-gray-500">Primetek Africa</span></span>
+          </div>
         </div>
 
         <Toaster

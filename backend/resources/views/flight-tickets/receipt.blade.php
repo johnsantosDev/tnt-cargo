@@ -67,7 +67,7 @@
                                 <div class="company-info">
                                     Logistique internationale & Billetterie<br>
                                     RDC<br>
-                                    contact@tntcargo.com
+                                    contact@agencetntcargo.com
                                 </div>
                             </td>
                         </tr>
@@ -247,7 +247,7 @@
 
     <div class="footer">
         <div class="footer-brand">TNT CARGO</div>
-        <div class="footer-info">Logistique internationale & Billetterie • RDC • contact@tntcargo.com</div>
+        <div class="footer-info">Logistique internationale & Billetterie • RDC • contact@agencetntcargo.com</div>
     </div>
 </body>
 </html>

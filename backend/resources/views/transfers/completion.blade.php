@@ -69,6 +69,15 @@
     <div class="amount-box">
         <div class="amount-label">Montant Remis au Client</div>
         <div class="amount-value">{{ number_format($transfer->amount, 2, ',', ' ') }} {{ $transfer->currency }}</div>
+        @if($transfer->transfer_fee > 0)
+        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #a7f3d0; font-size: 12px; color: #374151;">
+            <span>Frais de transfert:</span>
+            <strong>{{ number_format($transfer->transfer_fee, 2, ',', ' ') }} {{ $transfer->currency }}</strong>
+        </div>
+        <div style="margin-top: 4px; font-size: 13px; font-weight: bold; color: #065f46;">
+            Total facturé: {{ number_format($transfer->amount + $transfer->transfer_fee, 2, ',', ' ') }} {{ $transfer->currency }}
+        </div>
+        @endif
     </div>
 
     {{-- Route --}}
@@ -144,6 +153,10 @@
         <div class="ack-title">DÉCLARATION DU CLIENT</div>
         Je soussigné(e), <strong>{{ $transfer->client_name }}</strong>, confirme avoir reçu la somme de
         <strong>{{ number_format($transfer->amount, 2, ',', ' ') }} {{ $transfer->currency }}</strong>
+        @if($transfer->transfer_fee > 0)
+        (frais de transfert: <strong>{{ number_format($transfer->transfer_fee, 2, ',', ' ') }} {{ $transfer->currency }}</strong>,
+        total facturé: <strong>{{ number_format($transfer->amount + $transfer->transfer_fee, 2, ',', ' ') }} {{ $transfer->currency }}</strong>)
+        @endif
         au bureau de <strong>{{ $transfer->destination_region }}</strong>,
         correspondant au transfert référencé <strong>{{ $transfer->reference }}</strong>,
         initialement déposée au bureau de <strong>{{ $transfer->origin_region }}</strong>.

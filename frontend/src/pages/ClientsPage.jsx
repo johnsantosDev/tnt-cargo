@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal, Textarea } from '../components/ui';
 import { Plus, Search, Filter, Edit2, Trash2, Eye } from 'lucide-react';
 import ExportButtons from '../components/ui/ExportButtons';
+import toast from 'react-hot-toast';
 
 export default function ClientsPage() {
   const { t } = useTranslation();
@@ -36,8 +37,13 @@ export default function ClientsPage() {
 
   const handleDelete = async (id) => {
     if (!window.confirm(t('common.confirm_delete'))) return;
-    await api.delete(`/clients/${id}`);
-    fetchClients();
+    try {
+      await api.delete(`/clients/${id}`);
+      fetchClients();
+      toast.success(t('common.deleted'));
+    } catch {
+      toast.error(t('common.error'));
+    }
   };
 
   const typeBadge = (type) => {
@@ -127,8 +133,10 @@ function ClientFormModal({ data, onClose, onSaved }) {
       if (data?.id) await api.put(`/clients/${data.id}`, form);
       else await api.post('/clients', form);
       onSaved();
+      toast.success(t('common.saved'));
     } catch (err) {
       if (err.response?.status === 422) setErrors(err.response.data.errors || {});
+      else toast.error(err.response?.data?.message || t('common.error'));
     } finally { setLoading(false); }
   };
 

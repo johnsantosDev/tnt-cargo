@@ -7,6 +7,7 @@ import SearchableSelect from '../components/ui/SearchableSelect';
 import { Plus, Search, DollarSign, Edit2, Eye, Printer } from 'lucide-react';
 import { exportCashAdvanceInvoice } from '../utils/export';
 import ExportButtons from '../components/ui/ExportButtons';
+import toast from 'react-hot-toast';
 
 export default function CashAdvancesPage() {
   const { t } = useTranslation();
@@ -143,8 +144,10 @@ function CashAdvanceFormModal({ data, onClose, onSaved }) {
       if (data?.id) await api.put(`/cash-advances/${data.id}`, form);
       else await api.post('/cash-advances', form);
       onSaved();
+      toast.success(t('common.saved'));
     } catch (err) {
       if (err.response?.status === 422) setErrors(err.response.data.errors || {});
+      else toast.error(err.response?.data?.message || t('common.error'));
     } finally { setLoading(false); }
   };
 
@@ -297,8 +300,10 @@ function AddPaymentModal({ advance, onClose, onSaved }) {
       if (evidenceFile) formData.append('evidence', evidenceFile);
       await api.post(`/cash-advances/${advance.id}/payments`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       onSaved();
+      toast.success(t('common.saved'));
     } catch (err) {
       if (err.response?.status === 422) setErrors(err.response.data.errors || {});
+      else toast.error(err.response?.data?.message || t('common.error'));
     } finally { setLoading(false); }
   };
 

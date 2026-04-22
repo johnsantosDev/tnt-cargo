@@ -5,6 +5,7 @@ import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardHeader, CardBody, Button, Badge, StatusBadge, Spinner, Modal, Select, Textarea, Input } from '../components/ui';
 import { ArrowLeft, Upload, FileText, Trash2, CheckCircle, Clock, Download, MapPin, Share2, Copy, MessageCircle, Mail, Link2, Image as ImageIcon, Eye, X, Box, DollarSign } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function ShipmentDetailPage() {
   const { t } = useTranslation();
@@ -65,9 +66,14 @@ export default function ShipmentDetailPage() {
 
   const handleStatusUpdate = async (e) => {
     e.preventDefault();
-    await api.put(`/shipments/${id}/status`, statusForm);
-    setShowStatusModal(false);
-    fetch();
+    try {
+      await api.put(`/shipments/${id}/status`, statusForm);
+      setShowStatusModal(false);
+      fetch();
+      toast.success(t('common.saved'));
+    } catch (err) {
+      toast.error(err.response?.data?.message || t('common.error'));
+    }
   };
 
   const handleCompleteShipment = async () => {
@@ -77,8 +83,9 @@ export default function ShipmentDetailPage() {
       setShowCompleteModal(false);
       setCompletionNote('');
       fetch();
+      toast.success(t('shipment_completion.completed'));
     } catch (err) {
-      alert(err.response?.data?.message || t('common.error'));
+      toast.error(err.response?.data?.message || t('common.error'));
     } finally {
       setCompleting(false);
     }
@@ -92,7 +99,7 @@ export default function ShipmentDetailPage() {
       a.href = url; a.download = `shipment-completion-${shipment.tracking_number}.pdf`; a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert(t('common.error'));
+      toast.error(t('common.error'));
     }
   };
 
@@ -457,8 +464,11 @@ export default function ShipmentDetailPage() {
                           <button
                             onClick={async () => {
                               if (!window.confirm(t('common.confirm_delete'))) return;
-                              await api.delete(`/shipments/documents/${d.id}`);
-                              fetch();
+                              try {
+                                await api.delete(`/shipments/documents/${d.id}`);
+                                fetch();
+                                toast.success(t('common.deleted'));
+                              } catch { toast.error(t('common.error')); }
                             }}
                             className="p-1.5 text-gray-400 hover:text-red-600"
                           >
@@ -567,7 +577,8 @@ export default function ShipmentDetailPage() {
                   setUploadFiles([]);
                   setUploadName('');
                   fetch();
-                } catch (err) { console.error(err); }
+                  toast.success(t('common.saved'));
+                } catch (err) { toast.error(t('common.error')); }
                 finally { setUploading(false); }
               }}
             >
@@ -639,8 +650,10 @@ function RecordPaymentModal({ shipment, onClose, onSaved }) {
       if (proofFile) formData.append('proof', proofFile);
       await api.post('/payments', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       onSaved();
+      toast.success(t('common.saved'));
     } catch (err) {
       if (err.response?.status === 422) setErrors(err.response.data.errors || {});
+      else toast.error(err.response?.data?.message || t('common.error'));
     } finally { setLoading(false); }
   };
 

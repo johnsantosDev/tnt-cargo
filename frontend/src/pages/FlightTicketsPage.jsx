@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal, Textarea } from '../components/ui';
 import { Plus, Search, Download, Eye, Plane, Edit, Trash2, RotateCcw, Upload, Paperclip } from 'lucide-react';
 import ExportButtons from '../components/ui/ExportButtons';
+import toast from 'react-hot-toast';
 
 const AIRLINES = [
   'Ethiopian Airlines', 'Kenya Airways', 'RwandAir', 'Air Tanzania',
@@ -104,7 +105,7 @@ export default function FlightTicketsPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      console.error(err);
+      toast.error(t('common.error'));
     }
   };
 
@@ -114,8 +115,9 @@ export default function FlightTicketsPage() {
       await api.delete(`/flight-tickets/${id}`);
       fetchTickets();
       fetchStats();
+      toast.success(t('common.deleted'));
     } catch (err) {
-      console.error(err);
+      toast.error(err.response?.data?.message || t('common.error'));
     }
   };
 
@@ -526,8 +528,10 @@ function TicketFormModal({ ticket, onClose, onSaved }) {
         });
       }
       onSaved();
+      toast.success(t('common.saved'));
     } catch (err) {
       if (err.response?.status === 422) setErrors(err.response.data.errors || {});
+      else toast.error(err.response?.data?.message || t('common.error'));
     } finally { setLoading(false); }
   };
 

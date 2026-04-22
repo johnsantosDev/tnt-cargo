@@ -6,6 +6,7 @@ import { Card, CardBody, Button, Input, Select, Pagination, Badge, Modal, Textar
 import SearchableSelect from '../components/ui/SearchableSelect';
 import { Plus, Search, Eye, Package, CheckCircle, FileText, Trash2, Edit3, Box, Settings2, Truck, DollarSign, Download } from 'lucide-react';
 import ExportButtons from '../components/ui/ExportButtons';
+import toast from 'react-hot-toast';
 
 export default function PackingListsPage() {
   const { t } = useTranslation();
@@ -49,7 +50,8 @@ export default function PackingListsPage() {
       await api.delete(`/packing-lists/${id}`);
       setSelectedPLs(prev => prev.filter(plId => plId !== id));
       fetchLists();
-    } catch (err) { console.error(err); }
+      toast.success(t('common.deleted'));
+    } catch (err) { toast.error(err.response?.data?.message || t('common.error')); }
   };
 
   const toggleSelectPL = (id) => {
@@ -72,7 +74,7 @@ export default function PackingListsPage() {
       fetchLists();
       navigate(`/dashboard/shipments/${res.shipment.id}`);
     } catch (err) {
-      alert(err.response?.data?.message || 'Error');
+      toast.error(err.response?.data?.message || t('common.error'));
     } finally { setShipmentLoading(false); }
   };
 
@@ -280,8 +282,10 @@ function CreatePackingListModal({ onClose, onSaved }) {
         notes: form.notes || null,
       });
       onSaved();
+      toast.success(t('common.saved'));
     } catch (err) {
       if (err.response?.status === 422) setErrors(err.response.data.errors || {});
+      else toast.error(err.response?.data?.message || t('common.error'));
     } finally { setLoading(false); }
   };
 
@@ -378,7 +382,8 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
       await api.delete(`/packing-lists/${listId}/items/${itemId}`);
       fetchDetail();
       onRefresh();
-    } catch (err) { console.error(err); }
+      toast.success(t('common.deleted'));
+    } catch (err) { toast.error(err.response?.data?.message || t('common.error')); }
   };
 
   const handleFinalize = async (data) => {
@@ -388,7 +393,8 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
       fetchDetail();
       onRefresh();
       setShowFinalize(false);
-    } catch (err) { console.error(err); }
+      toast.success(t('common.saved'));
+    } catch (err) { toast.error(err.response?.data?.message || t('common.error')); }
     finally { setActionLoading(false); }
   };
 
@@ -396,10 +402,10 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
     setActionLoading(true);
     try {
       const { data } = await api.post(`/packing-lists/${listId}/invoice`);
-      alert(t('packing_list.invoice_generated') + ': ' + data.invoice.invoice_number);
+      toast.success(t('packing_list.invoice_generated') + ': ' + data.invoice.invoice_number);
       fetchDetail();
     } catch (err) {
-      alert(err.response?.data?.message || 'Error');
+      toast.error(err.response?.data?.message || t('common.error'));
     } finally { setActionLoading(false); }
   };
 
@@ -407,12 +413,12 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
     setActionLoading(true);
     try {
       const { data: res } = await api.post(`/packing-lists/${listId}/shipment`, data);
-      alert(t('packing_list.shipment_created') + ': ' + res.shipment.tracking_number);
+      toast.success(t('packing_list.shipment_created') + ': ' + res.shipment.tracking_number);
       fetchDetail();
       onRefresh();
       setShowCreateShipment(false);
     } catch (err) {
-      alert(err.response?.data?.message || 'Error');
+      toast.error(err.response?.data?.message || t('common.error'));
     } finally { setActionLoading(false); }
   };
 
@@ -423,7 +429,8 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
       fetchDetail();
       onRefresh();
       setShowEditDetails(false);
-    } catch (err) { console.error(err); }
+      toast.success(t('common.saved'));
+    } catch (err) { toast.error(err.response?.data?.message || t('common.error')); }
     finally { setActionLoading(false); }
   };
 
@@ -433,7 +440,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
       const url = window.URL.createObjectURL(new Blob([data]));
       const a = document.createElement('a'); a.href = url; a.download = `receipt-item-${itemId}.pdf`; a.click();
       window.URL.revokeObjectURL(url);
-    } catch (err) { console.error(err); }
+    } catch (err) { toast.error(t('common.error')); }
   };
 
   const downloadReceipt = async () => {
@@ -442,7 +449,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
       const url = window.URL.createObjectURL(new Blob([data]));
       const a = document.createElement('a'); a.href = url; a.download = `packing-list-${listId}.pdf`; a.click();
       window.URL.revokeObjectURL(url);
-    } catch (err) { console.error(err); }
+    } catch (err) { toast.error(t('common.error')); }
   };
 
   if (loading || !pl) {
@@ -725,8 +732,10 @@ function ItemFormModal({ packingListId, item = null, onClose, onSaved }) {
         await api.post(`/packing-lists/${packingListId}/items`, payload);
       }
       onSaved();
+      toast.success(t('common.saved'));
     } catch (err) {
       if (err.response?.status === 422) setErrors(err.response.data.errors || {});
+      else toast.error(err.response?.data?.message || t('common.error'));
     } finally { setLoading(false); }
   };
 

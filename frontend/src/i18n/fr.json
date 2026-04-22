@@ -493,6 +493,9 @@
     "no_data": "Aucune donnée",
     "confirm_delete": "Êtes-vous sûr de vouloir supprimer cet élément ?",
     "success": "Opération réussie",
+    "saved": "Enregistré avec succès",
+    "deleted": "Supprimé avec succès",
+    "download": "Télécharger",
     "error": "Une erreur est survenue",
     "actions": "Actions",
     "back": "Retour",
@@ -681,6 +684,8 @@
     "client_name": "Nom du client",
     "client_phone": "Téléphone",
     "amount": "Montant",
+    "transfer_fee": "Frais de transfert",
+    "total_charged": "Total facturé",
     "currency": "Devise",
     "origin_region": "Région d'origine",
     "destination_region": "Région de destination",
@@ -720,7 +725,12 @@
     "upload_signed": "Téléverser le document signé",
     "upload_signed_desc": "Téléversez la copie signée du document de finalisation par le client.",
     "signed_uploaded": "Document signé téléversé",
-    "download_signed": "Télécharger le document signé"
+    "download_signed": "Télécharger le document signé",
+    "created_success": "Transfert créé avec succès",
+    "approved_success": "Transfert approuvé",
+    "rejected_success": "Transfert rejeté",
+    "completed_success": "Transfert complété avec succès",
+    "signed_upload_success": "Document signé téléversé avec succès"
   },
   "shipment_completion": {
     "complete": "Finaliser l'expédition",

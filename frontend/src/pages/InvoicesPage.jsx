@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal } from '../components/ui';
 import { Plus, Search, Download, FileText, Eye } from 'lucide-react';
 import ExportButtons from '../components/ui/ExportButtons';
+import toast from 'react-hot-toast';
 
 export default function InvoicesPage() {
   const { t } = useTranslation();
@@ -46,7 +47,7 @@ export default function InvoicesPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      console.error(err);
+      toast.error(t('common.error'));
     }
   };
 
@@ -143,8 +144,10 @@ function InvoiceFormModal({ onClose, onSaved }) {
     try {
       await api.post(`/invoices/from-shipment/${selectedShipment}`);
       onSaved();
+      toast.success(t('common.saved'));
     } catch (err) {
       if (err.response?.status === 422) setErrors(err.response.data.errors || {});
+      else toast.error(err.response?.data?.message || t('common.error'));
     } finally { setLoading(false); }
   };
 

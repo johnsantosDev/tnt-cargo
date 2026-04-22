@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
 import { Modal, Input, Select, Textarea, Button } from '../../components/ui';
 import SearchableSelect from '../../components/ui/SearchableSelect';
+import toast from 'react-hot-toast';
 
 export default function ShipmentFormModal({ editId, statuses, onClose, onSaved }) {
   const { t } = useTranslation();
@@ -70,8 +71,10 @@ export default function ShipmentFormModal({ editId, statuses, onClose, onSaved }
         await api.post('/shipments', payload);
       }
       onSaved();
+      toast.success(t('common.saved'));
     } catch (err) {
       if (err.response?.status === 422) setErrors(err.response.data.errors || {});
+      else toast.error(err.response?.data?.message || t('common.error'));
     } finally {
       setLoading(false);
     }

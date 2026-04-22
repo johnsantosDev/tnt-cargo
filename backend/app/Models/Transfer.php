@@ -18,6 +18,7 @@ class Transfer extends Model
         'client_name',
         'client_phone',
         'amount',
+        'transfer_fee',
         'currency',
         'origin_region',
         'destination_region',
@@ -37,6 +38,7 @@ class Transfer extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'transfer_fee' => 'decimal:2',
             'approved_at' => 'datetime',
             'completed_at' => 'datetime',
         ];

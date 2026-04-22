@@ -64,7 +64,7 @@
                                 <div class="company-info">
                                     Logistique internationale<br>
                                     RDC<br>
-                                    contact@tntcargo.com
+                                    contact@agencetntcargo.com
                                 </div>
                             </td>
                         </tr>
@@ -217,7 +217,7 @@
         <div class="footer">
             <div class="footer-brand">TNT Cargo System</div>
             <div class="footer-info">
-                Logistique internationale &mdash; RDC &mdash; contact@tntcargo.com<br>
+                Logistique internationale &mdash; RDC &mdash; contact@agencetntcargo.com<br>
                 Facture {{ $invoice->invoice_number }} &mdash; Générée le {{ now()->format('d/m/Y à H:i') }}
             </div>
         </div>

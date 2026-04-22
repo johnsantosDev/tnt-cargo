@@ -7,6 +7,7 @@ import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinne
 import SearchableSelect from '../components/ui/SearchableSelect';
 import { Plus, Search, Edit2, Trash2, Download, Eye } from 'lucide-react';
 import ExportButtons from '../components/ui/ExportButtons';
+import toast from 'react-hot-toast';
 
 export default function PaymentsPage() {
   const { t } = useTranslation();
@@ -37,8 +38,13 @@ export default function PaymentsPage() {
 
   const handleDelete = async (id) => {
     if (!window.confirm(t('common.confirm_delete'))) return;
-    await api.delete(`/payments/${id}`);
-    fetchPayments();
+    try {
+      await api.delete(`/payments/${id}`);
+      fetchPayments();
+      toast.success(t('common.deleted'));
+    } catch {
+      toast.error(t('common.error'));
+    }
   };
 
   const methodBadge = (m) => {
@@ -162,8 +168,10 @@ function PaymentFormModal({ data, onClose, onSaved }) {
         await api.post('/payments', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       }
       onSaved();
+      toast.success(t('common.saved'));
     } catch (err) {
       if (err.response?.status === 422) setErrors(err.response.data.errors || {});
+      else toast.error(err.response?.data?.message || t('common.error'));
     } finally { setLoading(false); }
   };
 

@@ -73,6 +73,15 @@
     <div class="amount-box">
         <div class="amount-label">Montant du Transfert</div>
         <div class="amount-value">{{ number_format($transfer->amount, 2, ',', ' ') }} {{ $transfer->currency }}</div>
+        @if($transfer->transfer_fee > 0)
+        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #a7f3d0; font-size: 12px; color: #374151;">
+            <span>Frais de transfert:</span>
+            <strong>{{ number_format($transfer->transfer_fee, 2, ',', ' ') }} {{ $transfer->currency }}</strong>
+        </div>
+        <div style="margin-top: 4px; font-size: 13px; font-weight: bold; color: #065f46;">
+            Total: {{ number_format($transfer->amount + $transfer->transfer_fee, 2, ',', ' ') }} {{ $transfer->currency }}
+        </div>
+        @endif
     </div>
 
     {{-- Route --}}

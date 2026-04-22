@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import DashboardLayout from './components/layout/DashboardLayout';
+import { Toaster } from 'react-hot-toast';
 import './i18n';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -87,6 +88,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </Suspense>
+        <Toaster position="top-right" toastOptions={{ duration: 3500, style: { fontSize: '14px' } }} />
       </AuthProvider>
     </BrowserRouter>
   );

@@ -38,7 +38,7 @@
                     <div class="company-info">
                         Logistique internationale<br>
                         RDC<br>
-                        contact@tntcargo.com
+                        contact@agencetntcargo.com
                     </div>
                 </td>
                 <td style="text-align: right; vertical-align: top;">

@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal, Textarea } from '../components/ui';
 import { Plus, Search, CheckCircle, XCircle, Edit2, Trash2 } from 'lucide-react';
 import ExportButtons from '../components/ui/ExportButtons';
+import toast from 'react-hot-toast';
 
 export default function ExpensesPage() {
   const { t } = useTranslation();
@@ -44,8 +45,13 @@ export default function ExpensesPage() {
   };
   const handleDelete = async (id) => {
     if (!window.confirm(t('common.confirm_delete'))) return;
-    await api.delete(`/expenses/${id}`);
-    fetchExpenses();
+    try {
+      await api.delete(`/expenses/${id}`);
+      fetchExpenses();
+      toast.success(t('common.deleted'));
+    } catch {
+      toast.error(t('common.error'));
+    }
   };
 
   const statusBadge = (status) => {
@@ -140,8 +146,10 @@ function ExpenseFormModal({ data, onClose, onSaved }) {
       if (data?.id) await api.put(`/expenses/${data.id}`, form);
       else await api.post('/expenses', form);
       onSaved();
+      toast.success(t('common.saved'));
     } catch (err) {
       if (err.response?.status === 422) setErrors(err.response.data.errors || {});
+      else toast.error(err.response?.data?.message || t('common.error'));
     } finally { setLoading(false); }
   };
 

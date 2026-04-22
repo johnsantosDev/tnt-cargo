@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { Card, CardHeader, CardBody, Spinner, Badge, Pagination, Modal } from '../components/ui';
 import { ArrowRightLeft, Plus, Search, Check, X, Download, Eye, Upload, FileText, CheckCircle } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const REGIONS = ['Goma', 'Beni', 'Butembo', 'Lubumbashi', 'Kolwezi', 'Kinshasa', 'Bukavu', 'China', 'Dubai'];
 
@@ -39,7 +40,7 @@ export default function TransfersPage() {
 
   const [form, setForm] = useState({
     client_id: '', client_name: '', client_phone: '', amount: '', currency: 'USD',
-    origin_region: '', destination_region: '', notes: '',
+    transfer_fee: '50', origin_region: '', destination_region: '', notes: '',
   });
   const [docFile, setDocFile] = useState(null);
   const [completeNotes, setCompleteNotes] = useState('');
@@ -106,12 +107,13 @@ export default function TransfersPage() {
       if (docFile) formData.append('document', docFile);
       await api.post('/transfers', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       setShowCreate(false);
-      setForm({ client_id: '', client_name: '', client_phone: '', amount: '', currency: 'USD', origin_region: '', destination_region: '', notes: '' });
+      setForm({ client_id: '', client_name: '', client_phone: '', amount: '', currency: 'USD', transfer_fee: '50', origin_region: '', destination_region: '', notes: '' });
       setDocFile(null);
       setClientSearch('');
       fetchTransfers();
+      toast.success(t('transfers.created_success'));
     } catch (err) {
-      alert(err.response?.data?.message || t('common.error'));
+      toast.error(err.response?.data?.message || t('common.error'));
     } finally {
       setSaving(false);
     }
@@ -132,8 +134,9 @@ export default function TransfersPage() {
         const { data } = await api.get(`/transfers/${id}`);
         setShowDetail(data.data || data);
       }
+      toast.success(t(`transfers.${action}ed_success`) || t('common.success'));
     } catch (err) {
-      alert(err.response?.data?.message || t('common.error'));
+      toast.error(err.response?.data?.message || t('common.error'));
     }
   };
 
@@ -149,8 +152,9 @@ export default function TransfersPage() {
         const { data } = await api.get(`/transfers/${showComplete.id}`);
         setShowDetail(data.data || data);
       }
+      toast.success(t('transfers.completed_success'));
     } catch (err) {
-      alert(err.response?.data?.message || t('common.error'));
+      toast.error(err.response?.data?.message || t('common.error'));
     } finally {
       setSaving(false);
     }
@@ -164,7 +168,7 @@ export default function TransfersPage() {
       a.href = url; a.download = `transfer-receipt-${id}.pdf`; a.click();
       URL.revokeObjectURL(url);
     } catch {
-      alert(t('common.error'));
+      toast.error(t('common.error'));
     }
   };
 
@@ -176,7 +180,7 @@ export default function TransfersPage() {
       a.href = url; a.download = `transfer-completion-${id}.pdf`; a.click();
       URL.revokeObjectURL(url);
     } catch {
-      alert(t('common.error'));
+      toast.error(t('common.error'));
     }
   };
 
@@ -349,6 +353,21 @@ export default function TransfersPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('transfers.transfer_fee')} <span className="text-gray-400 font-normal text-xs">(par défaut $50)</span></label>
+                <input type="number" step="0.01" min="0" value={form.transfer_fee} onChange={(e) => setForm({ ...form, transfer_fee: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+              </div>
+              <div className="flex items-end">
+                <div className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+                  <span className="text-gray-500 text-xs block">{t('transfers.total_charged')}</span>
+                  <span className="font-bold text-gray-800">
+                    {Number((parseFloat(form.amount) || 0) + (parseFloat(form.transfer_fee) || 0)).toLocaleString('en-US', { minimumFractionDigits: 2 })} {form.currency}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('transfers.origin_region')}</label>
                 <select required value={form.origin_region} onChange={(e) => setForm({ ...form, origin_region: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
@@ -403,6 +422,12 @@ export default function TransfersPage() {
               <div><span className="text-gray-500">{t('transfers.client_name')}:</span> <span className="font-medium">{showDetail.client_name || showDetail.client?.name}</span></div>
               <div><span className="text-gray-500">{t('transfers.client_phone')}:</span> <span className="font-medium">{showDetail.client_phone}</span></div>
               <div><span className="text-gray-500">{t('transfers.amount')}:</span> <span className="font-bold">{formatMoney(showDetail.amount, showDetail.currency)}</span></div>
+              {showDetail.transfer_fee > 0 && (
+                <div><span className="text-gray-500">{t('transfers.transfer_fee')}:</span> <span className="font-medium text-amber-700">{formatMoney(showDetail.transfer_fee, showDetail.currency)}</span></div>
+              )}
+              {showDetail.transfer_fee > 0 && (
+                <div><span className="text-gray-500">{t('transfers.total_charged')}:</span> <span className="font-bold text-gray-900">{formatMoney((parseFloat(showDetail.amount) || 0) + (parseFloat(showDetail.transfer_fee) || 0), showDetail.currency)}</span></div>
+              )}
               <div><span className="text-gray-500">{t('transfers.origin_region')}:</span> <span className="font-medium">{showDetail.origin_region}</span></div>
               <div><span className="text-gray-500">{t('transfers.destination_region')}:</span> <span className="font-medium">{showDetail.destination_region}</span></div>
               <div><span className="text-gray-500">{t('transfers.created_at')}:</span> <span className="font-medium">{new Date(showDetail.created_at).toLocaleDateString()}</span></div>
@@ -425,7 +450,7 @@ export default function TransfersPage() {
                     const { data } = await api.get(`/transfers/${showDetail.id}/document`, { responseType: 'blob' });
                     const url = URL.createObjectURL(data);
                     const a = window.document.createElement('a'); a.href = url; a.download = `transfer-doc-${showDetail.reference}`; a.click(); URL.revokeObjectURL(url);
-                  } catch { alert(t('common.error')); }
+                  } catch { toast.error(t('common.error')); }
                 }} className="ml-auto text-blue-600 hover:text-blue-800 text-xs font-medium underline">
                   {t('common.download')}
                 </button>
@@ -449,7 +474,7 @@ export default function TransfersPage() {
                         const { data } = await api.get(`/transfers/${showDetail.id}/signed-document`, { responseType: 'blob' });
                         const url = URL.createObjectURL(data);
                         const a = window.document.createElement('a'); a.href = url; a.download = `signed-completion-${showDetail.reference}`; a.click(); URL.revokeObjectURL(url);
-                      } catch { alert(t('common.error')); }
+                      } catch { toast.error(t('common.error')); }
                     }} className="ml-auto text-green-600 hover:text-green-800 text-xs font-medium underline">
                       {t('transfers.download_signed')}
                     </button>
@@ -467,8 +492,9 @@ export default function TransfersPage() {
                         const { data } = await api.post(`/transfers/${showDetail.id}/signed-document`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
                         setShowDetail(data.transfer || { ...showDetail, signed_document_path: true });
                         fetchTransfers();
+                        toast.success(t('transfers.signed_upload_success'));
                       } catch (err) {
-                        alert(err.response?.data?.message || t('common.error'));
+                        toast.error(err.response?.data?.message || t('common.error'));
                       }
                     }}
                     className="w-full px-3 py-2 border border-amber-300 rounded-lg text-sm bg-white file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-amber-100 file:text-amber-700 hover:file:bg-amber-200"
@@ -512,6 +538,9 @@ export default function TransfersPage() {
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div><span className="text-gray-500">{t('transfers.reference')}:</span> <span className="font-medium">{showComplete.reference}</span></div>
               <div><span className="text-gray-500">{t('transfers.amount')}:</span> <span className="font-bold">{formatMoney(showComplete.amount, showComplete.currency)}</span></div>
+              {showComplete.transfer_fee > 0 && (
+                <div><span className="text-gray-500">{t('transfers.transfer_fee')}:</span> <span className="font-medium text-amber-700">{formatMoney(showComplete.transfer_fee, showComplete.currency)}</span></div>
+              )}
               <div><span className="text-gray-500">{t('transfers.client_name')}:</span> <span className="font-medium">{showComplete.client_name || showComplete.client?.name}</span></div>
               <div><span className="text-gray-500">{t('transfers.destination_region')}:</span> <span className="font-medium">{showComplete.destination_region}</span></div>
             </div>
