@@ -1,0 +1,7 @@
+
+deployment
+zip the content of dist and deploy 
+
+
+jetro
+$2y$12$Uky9lzxElOdFCfdCZIHSv.5dtDjYGXb2sxaCp6YP.NYG0MI84RLpm
