@@ -5,6 +5,8 @@ import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardHeader, CardBody, Button, Badge, StatusBadge, Spinner, Modal, Select, Textarea, Input } from '../components/ui';
 import { ArrowLeft, Upload, FileText, Trash2, CheckCircle, Clock, Download, MapPin, Share2, Copy, MessageCircle, Mail, Link2, Image as ImageIcon, Eye, X, Box, DollarSign } from 'lucide-react';
+import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
+import { sendViaWhatsApp } from '../utils/export';
 import toast from 'react-hot-toast';
 
 export default function ShipmentDetailPage() {
@@ -28,6 +30,7 @@ export default function ShipmentDetailPage() {
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completionNote, setCompletionNote] = useState('');
   const [completing, setCompleting] = useState(false);
+  const [whatsappModal, setWhatsappModal] = useState(null);
 
   const fetch = () => {
     setLoading(true);
@@ -63,6 +66,8 @@ export default function ShipmentDetailPage() {
 
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('fr-FR') : '-';
+
+  const openWhatsAppModal = (payload) => setWhatsappModal(payload);
 
   const handleStatusUpdate = async (e) => {
     e.preventDefault();
@@ -134,9 +139,22 @@ export default function ShipmentDetailPage() {
           </Button>
         )}
         {shipment.completed_at && (
-          <Button onClick={downloadCompletionPdf} variant="secondary">
-            <Download className="w-4 h-4 mr-1" /> {t('shipment_completion.download_doc')}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={downloadCompletionPdf} variant="secondary">
+              <Download className="w-4 h-4 mr-1" /> {t('shipment_completion.download_doc')}
+            </Button>
+            <button
+              onClick={() => openWhatsAppModal({
+                phone: shipment.client?.phone || '',
+                fileName: `shipment-completion-${shipment.tracking_number}.pdf`,
+                getBlob: async () => { const r = await api.get(`/shipments/${id}/completion-pdf`, { responseType: 'blob' }); return r.data; },
+              })}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600"
+              title="Envoyer via WhatsApp"
+            >
+              <MessageCircle className="w-4 h-4" /> WhatsApp
+            </button>
+          </div>
         )}
       </div>
 
@@ -460,6 +478,17 @@ export default function ShipmentDetailPage() {
                         >
                           <Download className="w-4 h-4" />
                         </button>
+                        <button
+                          onClick={() => openWhatsAppModal({
+                            phone: shipment.client?.phone || '',
+                            fileName: d.name,
+                            getBlob: async () => { const r = await api.get(`/shipments/documents/${d.id}/download`, { responseType: 'blob' }); return r.data; },
+                          })}
+                          className="p-1.5 text-gray-400 hover:text-green-600"
+                          title="Envoyer via WhatsApp"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                        </button>
                         {hasPermission('shipments.edit') && (
                           <button
                             onClick={async () => {
@@ -525,6 +554,23 @@ export default function ShipmentDetailPage() {
           <Input label={t('shipments.document_name')} value={uploadName} onChange={(e) => setUploadName(e.target.value)} placeholder={t('shipments.document_name_optional')} />
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">{t('shipments.files')}</label>
+
+        {whatsappModal && (
+          <WhatsAppSendModal
+            phone={whatsappModal.phone}
+            onClose={() => setWhatsappModal(null)}
+            onSend={async (phone) => {
+              try {
+                const blob = await whatsappModal.getBlob();
+                await sendViaWhatsApp(blob, whatsappModal.fileName, phone);
+              } catch {
+                toast.error(t('common.error'));
+              } finally {
+                setWhatsappModal(null);
+              }
+            }}
+          />
+        )}
             <div
               className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center cursor-pointer hover:border-primary-400 transition-colors"
               onClick={() => document.getElementById('multi-file-input').click()}

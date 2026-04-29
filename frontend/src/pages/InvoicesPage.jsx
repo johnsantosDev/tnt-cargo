@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal } from '../components/ui';
-import { Plus, Search, Download, FileText, Eye } from 'lucide-react';
+import { Plus, Search, Download, FileText, Eye, MessageCircle } from 'lucide-react';
+import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
+import { sendViaWhatsApp } from '../utils/export';
 import ExportButtons from '../components/ui/ExportButtons';
 import toast from 'react-hot-toast';
 
@@ -18,6 +20,7 @@ export default function InvoicesPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
+  const [whatsappModal, setWhatsappModal] = useState(null);
 
   const fetchInvoices = useCallback(() => {
     setLoading(true);
@@ -51,6 +54,18 @@ export default function InvoicesPage() {
     }
   };
 
+  const handleWhatsAppSend = async (phone) => {
+    if (!whatsappModal) return;
+    try {
+      const blob = await whatsappModal.getBlob();
+      await sendViaWhatsApp(blob, whatsappModal.fileName, phone);
+    } catch {
+      toast.error(t('common.error'));
+    } finally {
+      setWhatsappModal(null);
+    }
+  };
+
   const statusBadge = (status) => {
     const map = { draft: 'gray', sent: 'blue', paid: 'green', overdue: 'red', cancelled: 'red' };
     const labels = { draft: 'Brouillon', sent: 'Envoyée', paid: 'Payée', overdue: 'En retard', cancelled: 'Annulée' };
@@ -73,7 +88,16 @@ export default function InvoicesPage() {
       key: 'actions', label: '', render: (row) => (
         <div className="flex gap-1">
           <button onClick={() => setShowDetail(row)} className="p-1.5 text-gray-400 hover:text-primary-600"><Eye className="w-4 h-4" /></button>
-          <button onClick={() => handleDownload(row.id)} className="p-1.5 text-gray-400 hover:text-green-600"><Download className="w-4 h-4" /></button>
+          <button onClick={() => handleDownload(row.id)} className="p-1.5 text-gray-400 hover:text-green-600" title={t('common.download')}><Download className="w-4 h-4" /></button>
+          <button
+            onClick={() => setWhatsappModal({
+              phone: row.client?.phone || '',
+              fileName: `facture-${row.id}.pdf`,
+              getBlob: async () => { const r = await api.get(`/invoices/${row.id}/pdf`, { responseType: 'blob' }); return r.data; },
+            })}
+            className="p-1.5 text-gray-400 hover:text-green-500"
+            title="Envoyer via WhatsApp"
+          ><MessageCircle className="w-4 h-4" /></button>
         </div>
       )
     }
@@ -120,7 +144,19 @@ export default function InvoicesPage() {
       </Card>
 
       {showForm && <InvoiceFormModal onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); fetchInvoices(); }} />}
-      {showDetail && <InvoiceDetailModal invoice={showDetail} onClose={() => setShowDetail(null)} onDownload={handleDownload} />}
+      {showDetail && (
+        <InvoiceDetailModal
+          invoice={showDetail}
+          onClose={() => setShowDetail(null)}
+          onDownload={handleDownload}
+          onWhatsApp={(invoice) => setWhatsappModal({
+            phone: invoice.client?.phone || '',
+            fileName: `facture-${invoice.id}.pdf`,
+            getBlob: async () => { const r = await api.get(`/invoices/${invoice.id}/pdf`, { responseType: 'blob' }); return r.data; },
+          })}
+        />
+      )}
+      {whatsappModal && <WhatsAppSendModal phone={whatsappModal.phone} onClose={() => setWhatsappModal(null)} onSend={handleWhatsAppSend} />}
     </div>
   );
 }
@@ -167,7 +203,7 @@ function InvoiceFormModal({ onClose, onSaved }) {
   );
 }
 
-function InvoiceDetailModal({ invoice, onClose, onDownload }) {
+function InvoiceDetailModal({ invoice, onClose, onDownload, onWhatsApp }) {
   const { t } = useTranslation();
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('fr-FR') : '-';
@@ -215,6 +251,13 @@ function InvoiceDetailModal({ invoice, onClose, onDownload }) {
 
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="secondary" onClick={onClose}>{t('common.close')}</Button>
+          <button
+            onClick={() => onWhatsApp(invoice)}
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm text-white bg-green-500 hover:bg-green-600 rounded-lg font-medium"
+            title="Envoyer via WhatsApp"
+          >
+            <MessageCircle className="w-4 h-4" />WhatsApp
+          </button>
           <Button onClick={() => onDownload(invoice.id)}><Download className="w-4 h-4 mr-2" />{t('invoices.download')}</Button>
         </div>
       </div>

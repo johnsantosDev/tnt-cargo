@@ -4,9 +4,10 @@ import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardHeader, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal, Textarea } from '../components/ui';
 import SearchableSelect from '../components/ui/SearchableSelect';
-import { Plus, Search, DollarSign, Edit2, Eye, Printer } from 'lucide-react';
-import { exportCashAdvanceInvoice } from '../utils/export';
+import { Plus, Search, DollarSign, Edit2, Eye, Printer, MessageCircle } from 'lucide-react';
+import { exportCashAdvanceInvoice, sendViaWhatsApp } from '../utils/export';
 import ExportButtons from '../components/ui/ExportButtons';
+import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
 import toast from 'react-hot-toast';
 
 export default function CashAdvancesPage() {
@@ -22,6 +23,7 @@ export default function CashAdvancesPage() {
   const [editData, setEditData] = useState(null);
   const [showDetail, setShowDetail] = useState(null);
   const [showPayment, setShowPayment] = useState(null);
+  const [whatsappModal, setWhatsappModal] = useState(null);
 
   const fetchAdvances = useCallback(() => {
     setLoading(true);
@@ -108,8 +110,24 @@ export default function CashAdvancesPage() {
       </Card>
 
       {showForm && <CashAdvanceFormModal data={editData} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); fetchAdvances(); }} />}
-      {showDetail && <CashAdvanceDetailModal advance={showDetail} onClose={() => setShowDetail(null)} />}
+      {showDetail && <CashAdvanceDetailModal advance={showDetail} onClose={() => setShowDetail(null)} onWhatsApp={setWhatsappModal} />}
       {showPayment && <AddPaymentModal advance={showPayment} onClose={() => setShowPayment(null)} onSaved={() => { setShowPayment(null); fetchAdvances(); }} />}
+      {whatsappModal && (
+        <WhatsAppSendModal
+          phone={whatsappModal.phone}
+          onClose={() => setWhatsappModal(null)}
+          onSend={async (phone) => {
+            try {
+              const blob = await whatsappModal.getBlob();
+              await sendViaWhatsApp(blob, whatsappModal.fileName, phone);
+            } catch {
+              toast.error(t('common.error'));
+            } finally {
+              setWhatsappModal(null);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -197,7 +215,7 @@ function CashAdvanceFormModal({ data, onClose, onSaved }) {
   );
 }
 
-function CashAdvanceDetailModal({ advance: initialAdvance, onClose }) {
+function CashAdvanceDetailModal({ advance: initialAdvance, onClose, onWhatsApp }) {
   const { t } = useTranslation();
   const [advance, setAdvance] = useState(initialAdvance);
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
@@ -220,6 +238,17 @@ function CashAdvanceDetailModal({ advance: initialAdvance, onClose }) {
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
           >
             <Printer className="w-4 h-4" />{t('cash_advances.print_invoice')}
+          </button>
+          <button
+            onClick={() => onWhatsApp({
+              phone: advance.client?.phone || '',
+              fileName: `avance-${advance.reference}.pdf`,
+              getBlob: async () => exportCashAdvanceInvoice(advance, t, { returnBlob: true }),
+            })}
+            className="ml-2 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600"
+            title="Envoyer via WhatsApp"
+          >
+            <MessageCircle className="w-4 h-4" />WhatsApp
           </button>
         </div>
         <div className="space-y-1">

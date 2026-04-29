@@ -4,8 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { Card, CardBody, Button, Input, Select, Pagination, Badge, Modal, Textarea } from '../components/ui';
 import SearchableSelect from '../components/ui/SearchableSelect';
-import { Plus, Search, Eye, Package, CheckCircle, FileText, Trash2, Edit3, Box, Settings2, Truck, DollarSign, Download } from 'lucide-react';
+import { Plus, Search, Eye, Package, CheckCircle, FileText, Trash2, Edit3, Box, Settings2, Truck, DollarSign, Download, MessageCircle } from 'lucide-react';
 import ExportButtons from '../components/ui/ExportButtons';
+import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
+import { sendViaWhatsApp } from '../utils/export';
 import toast from 'react-hot-toast';
 
 export default function PackingListsPage() {
@@ -363,6 +365,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
   const [showEditDetails, setShowEditDetails] = useState(false);
   const [showCreateShipment, setShowCreateShipment] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [whatsappModal, setWhatsappModal] = useState(null);
 
   const fetchDetail = useCallback(() => {
     setLoading(true);
@@ -440,7 +443,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
       const url = window.URL.createObjectURL(new Blob([data]));
       const a = document.createElement('a'); a.href = url; a.download = `receipt-item-${itemId}.pdf`; a.click();
       window.URL.revokeObjectURL(url);
-    } catch (err) { toast.error(t('common.error')); }
+    } catch { toast.error(t('common.error')); }
   };
 
   const downloadReceipt = async () => {
@@ -449,8 +452,10 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
       const url = window.URL.createObjectURL(new Blob([data]));
       const a = document.createElement('a'); a.href = url; a.download = `packing-list-${listId}.pdf`; a.click();
       window.URL.revokeObjectURL(url);
-    } catch (err) { toast.error(t('common.error')); }
+    } catch { toast.error(t('common.error')); }
   };
+
+  const openWhatsAppModal = (payload) => setWhatsappModal(payload);
 
   if (loading || !pl) {
     return (
@@ -565,6 +570,15 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
                         <td className="px-3 py-2 text-right">
                           <div className="flex gap-1 justify-end">
                             <button onClick={() => downloadItemReceipt(item.id)} className="p-1 text-gray-400 hover:text-green-600" title={t('packing_list.download_receipt')}><Download className="w-3.5 h-3.5" /></button>
+                            <button
+                              onClick={() => openWhatsAppModal({
+                                phone: pl.client?.phone || '',
+                                fileName: `receipt-item-${item.id}.pdf`,
+                                getBlob: async () => { const r = await api.get(`/packing-lists/${listId}/items/${item.id}/receipt`, { responseType: 'blob' }); return r.data; },
+                              })}
+                              className="p-1 text-gray-400 hover:text-green-500"
+                              title="Envoyer via WhatsApp"
+                            ><MessageCircle className="w-3.5 h-3.5" /></button>
                             <button onClick={() => setEditItem(item)} className="p-1 text-gray-400 hover:text-blue-600"><Edit3 className="w-3.5 h-3.5" /></button>
                             <button onClick={() => handleDeleteItem(item.id)} className="p-1 text-gray-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
@@ -572,7 +586,18 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
                       )}
                       {!isDraft && (
                         <td className="px-3 py-2 text-right">
-                          <button onClick={() => downloadItemReceipt(item.id)} className="p-1 text-gray-400 hover:text-green-600" title={t('packing_list.download_receipt')}><Download className="w-3.5 h-3.5" /></button>
+                          <div className="flex gap-1 justify-end">
+                            <button onClick={() => downloadItemReceipt(item.id)} className="p-1 text-gray-400 hover:text-green-600" title={t('packing_list.download_receipt')}><Download className="w-3.5 h-3.5" /></button>
+                            <button
+                              onClick={() => openWhatsAppModal({
+                                phone: pl.client?.phone || '',
+                                fileName: `receipt-item-${item.id}.pdf`,
+                                getBlob: async () => { const r = await api.get(`/packing-lists/${listId}/items/${item.id}/receipt`, { responseType: 'blob' }); return r.data; },
+                              })}
+                              className="p-1 text-gray-400 hover:text-green-500"
+                              title="Envoyer via WhatsApp"
+                            ><MessageCircle className="w-3.5 h-3.5" /></button>
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -604,6 +629,17 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
           <Button variant="outline" onClick={downloadReceipt}>
             <Download className="w-4 h-4 mr-2" />{t('packing_list.download_receipt')}
           </Button>
+          <button
+            onClick={() => openWhatsAppModal({
+              phone: pl.client?.phone || '',
+              fileName: `packing-list-${listId}.pdf`,
+              getBlob: async () => { const r = await api.get(`/packing-lists/${listId}/receipt`, { responseType: 'blob' }); return r.data; },
+            })}
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm text-white bg-green-500 hover:bg-green-600 rounded-lg"
+            title="Envoyer via WhatsApp"
+          >
+            <MessageCircle className="w-4 h-4" />WhatsApp
+          </button>
           {isDraft && pl.items?.length > 0 && (
             <Button variant="success" onClick={() => setShowFinalize(true)}>
               <CheckCircle className="w-4 h-4 mr-2" />{t('packing_list.finalize')}
@@ -665,6 +701,22 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
           onClose={() => setShowCreateShipment(false)}
           onSubmit={handleCreateShipment}
           loading={actionLoading}
+        />
+      )}
+      {whatsappModal && (
+        <WhatsAppSendModal
+          phone={whatsappModal.phone}
+          onClose={() => setWhatsappModal(null)}
+          onSend={async (phone) => {
+            try {
+              const blob = await whatsappModal.getBlob();
+              await sendViaWhatsApp(blob, whatsappModal.fileName, phone);
+            } catch {
+              toast.error(t('common.error'));
+            } finally {
+              setWhatsappModal(null);
+            }
+          }}
         />
       )}
     </Modal>

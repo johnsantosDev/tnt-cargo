@@ -3,7 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { Card, CardHeader, CardBody, Badge, Spinner, Button } from '../components/ui';
-import { ArrowLeft, Download, CreditCard, FileText, Image as ImageIcon, Eye, X } from 'lucide-react';
+import { ArrowLeft, Download, CreditCard, FileText, Image as ImageIcon, Eye, X, MessageCircle } from 'lucide-react';
+import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
+import { sendViaWhatsApp } from '../utils/export';
+import toast from 'react-hot-toast';
 
 export default function PaymentDetailPage() {
   const { t } = useTranslation();
@@ -13,6 +16,7 @@ export default function PaymentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [previewProof, setPreviewProof] = useState(false);
   const [proofUrl, setProofUrl] = useState(null);
+  const [whatsappModal, setWhatsappModal] = useState(null);
 
   useEffect(() => {
     api.get(`/payments/${id}`)
@@ -77,6 +81,17 @@ export default function PaymentDetailPage() {
         }}>
           <Download className="w-4 h-4 mr-2" />PDF
         </Button>
+        <button
+          onClick={() => setWhatsappModal({
+            phone: payment.client?.phone || '',
+            fileName: `recu-${payment.client?.name || ''}-${payment.reference}.pdf`,
+            getBlob: async () => { const r = await api.get(`/payments/${id}/pdf`, { responseType: 'blob' }); return r.data; },
+          })}
+          className="inline-flex items-center gap-2 px-3 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600"
+          title="Envoyer via WhatsApp"
+        >
+          <MessageCircle className="w-4 h-4" />WhatsApp
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -158,6 +173,19 @@ export default function PaymentDetailPage() {
             )}
           </div>
         </div>
+      )}
+      {whatsappModal && (
+        <WhatsAppSendModal
+          phone={whatsappModal.phone}
+          onClose={() => setWhatsappModal(null)}
+          onSend={async (phone) => {
+            try {
+              const blob = await whatsappModal.getBlob();
+              await sendViaWhatsApp(blob, whatsappModal.fileName, phone);
+            } catch { toast.error(t('common.error')); }
+            finally { setWhatsappModal(null); }
+          }}
+        />
       )}
     </div>
   );

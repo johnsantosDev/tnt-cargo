@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { Card, CardHeader, CardBody, Spinner, Badge, Pagination, Modal } from '../components/ui';
-import { ArrowRightLeft, Plus, Search, Check, X, Download, Eye, Upload, FileText, CheckCircle } from 'lucide-react';
+import { ArrowRightLeft, Plus, Search, Check, X, Download, Eye, Upload, FileText, CheckCircle, MessageCircle } from 'lucide-react';
+import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
+import { sendViaWhatsApp } from '../utils/export';
 import toast from 'react-hot-toast';
 
 const REGIONS = ['Goma', 'Beni', 'Butembo', 'Lubumbashi', 'Kolwezi', 'Kinshasa', 'Bukavu', 'China', 'Dubai'];
@@ -31,6 +33,7 @@ export default function TransfersPage() {
   const [showDetail, setShowDetail] = useState(null);
   const [showComplete, setShowComplete] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [whatsappModal, setWhatsappModal] = useState(null);
 
   // Client search
   const [clients, setClients] = useState([]);
@@ -186,6 +189,8 @@ export default function TransfersPage() {
 
   const formatMoney = (v, cur = 'USD') => `${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })} ${cur}`;
 
+  const openWhatsAppModal = (payload) => setWhatsappModal(payload);
+
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:justify-between sm:items-center">
@@ -261,6 +266,17 @@ export default function TransfersPage() {
                           <button onClick={() => downloadReceipt(tr.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50" title={t('transfers.receipt')}>
                             <Download className="w-4 h-4" />
                           </button>
+                          <button
+                            onClick={() => openWhatsAppModal({
+                              phone: tr.client_phone || tr.client?.phone || '',
+                              fileName: `transfer-receipt-${tr.id}.pdf`,
+                              getBlob: async () => { const r = await api.get(`/transfers/${tr.id}/receipt`, { responseType: 'blob' }); return r.data; },
+                            })}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50"
+                            title="Envoyer via WhatsApp"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                          </button>
                           {isManager && tr.status === 'pending_approval' && (
                             <>
                               <button onClick={() => handleAction(tr.id, 'approve')} className="p-1.5 rounded-lg text-green-500 hover:text-green-700 hover:bg-green-50" title={t('transfers.approve')}>
@@ -277,9 +293,22 @@ export default function TransfersPage() {
                             </button>
                           )}
                           {tr.status === 'completed' && (
-                            <button onClick={() => downloadCompletion(tr.id)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 transition-colors" title={t('transfers.completion_doc')}>
-                              <Download className="w-3.5 h-3.5" /> {t('transfers.completion_doc') || 'Accusé'}
-                            </button>
+                            <>
+                              <button onClick={() => downloadCompletion(tr.id)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 transition-colors" title={t('transfers.completion_doc')}>
+                                <Download className="w-3.5 h-3.5" /> {t('transfers.completion_doc') || 'Accusé'}
+                              </button>
+                              <button
+                                onClick={() => openWhatsAppModal({
+                                  phone: tr.client_phone || tr.client?.phone || '',
+                                  fileName: `transfer-completion-${tr.id}.pdf`,
+                                  getBlob: async () => { const r = await api.get(`/transfers/${tr.id}/completion-pdf`, { responseType: 'blob' }); return r.data; },
+                                })}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-white bg-green-500 hover:bg-green-600 transition-colors"
+                                title="Envoyer via WhatsApp"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>
@@ -454,6 +483,16 @@ export default function TransfersPage() {
                 }} className="ml-auto text-blue-600 hover:text-blue-800 text-xs font-medium underline">
                   {t('common.download')}
                 </button>
+                <button
+                  onClick={() => openWhatsAppModal({
+                    phone: showDetail.client_phone || showDetail.client?.phone || '',
+                    fileName: `transfer-doc-${showDetail.reference}`,
+                    getBlob: async () => { const r = await api.get(`/transfers/${showDetail.id}/document`, { responseType: 'blob' }); return r.data; },
+                  })}
+                  className="text-green-600 hover:text-green-700 text-xs font-medium underline"
+                >
+                  WhatsApp
+                </button>
               </div>
             )}
 
@@ -477,6 +516,16 @@ export default function TransfersPage() {
                       } catch { toast.error(t('common.error')); }
                     }} className="ml-auto text-green-600 hover:text-green-800 text-xs font-medium underline">
                       {t('transfers.download_signed')}
+                    </button>
+                    <button
+                      onClick={() => openWhatsAppModal({
+                        phone: showDetail.client_phone || showDetail.client?.phone || '',
+                        fileName: `signed-completion-${showDetail.reference}`,
+                        getBlob: async () => { const r = await api.get(`/transfers/${showDetail.id}/signed-document`, { responseType: 'blob' }); return r.data; },
+                      })}
+                      className="text-green-600 hover:text-green-700 text-xs font-medium underline"
+                    >
+                      WhatsApp
                     </button>
                   </div>
                 ) : (
@@ -507,15 +556,37 @@ export default function TransfersPage() {
               <button onClick={() => downloadReceipt(showDetail.id)} className="inline-flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-200">
                 <Download className="w-4 h-4" /> {t('transfers.receipt')}
               </button>
+              <button
+                onClick={() => openWhatsAppModal({
+                  phone: showDetail.client_phone || showDetail.client?.phone || '',
+                  fileName: `transfer-receipt-${showDetail.id}.pdf`,
+                  getBlob: async () => { const r = await api.get(`/transfers/${showDetail.id}/receipt`, { responseType: 'blob' }); return r.data; },
+                })}
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm text-white bg-green-500 hover:bg-green-600 rounded-lg"
+              >
+                <MessageCircle className="w-4 h-4" /> WhatsApp
+              </button>
               {showDetail.status === 'approved' && (
                 <button onClick={() => { setShowDetail(null); handleAction(showDetail.id, 'complete'); }} className="inline-flex items-center gap-2 px-3 py-2 text-sm text-white bg-green-600 hover:bg-green-700 rounded-lg font-medium">
                   <CheckCircle className="w-4 h-4" /> {t('transfers.complete')}
                 </button>
               )}
               {showDetail.status === 'completed' && (
-                <button onClick={() => downloadCompletion(showDetail.id)} className="inline-flex items-center gap-2 px-3 py-2 text-sm text-green-600 hover:bg-green-50 rounded-lg border border-green-200">
-                  <Download className="w-4 h-4" /> {t('transfers.completion_doc')}
-                </button>
+                <>
+                  <button onClick={() => downloadCompletion(showDetail.id)} className="inline-flex items-center gap-2 px-3 py-2 text-sm text-green-600 hover:bg-green-50 rounded-lg border border-green-200">
+                    <Download className="w-4 h-4" /> {t('transfers.completion_doc')}
+                  </button>
+                  <button
+                    onClick={() => openWhatsAppModal({
+                      phone: showDetail.client_phone || showDetail.client?.phone || '',
+                      fileName: `transfer-completion-${showDetail.id}.pdf`,
+                      getBlob: async () => { const r = await api.get(`/transfers/${showDetail.id}/completion-pdf`, { responseType: 'blob' }); return r.data; },
+                    })}
+                    className="inline-flex items-center gap-2 px-3 py-2 text-sm text-white bg-green-500 hover:bg-green-600 rounded-lg"
+                  >
+                    <MessageCircle className="w-4 h-4" /> WhatsApp
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -558,6 +629,23 @@ export default function TransfersPage() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {whatsappModal && (
+        <WhatsAppSendModal
+          phone={whatsappModal.phone}
+          onClose={() => setWhatsappModal(null)}
+          onSend={async (phone) => {
+            try {
+              const blob = await whatsappModal.getBlob();
+              await sendViaWhatsApp(blob, whatsappModal.fileName, phone);
+            } catch {
+              toast.error(t('common.error'));
+            } finally {
+              setWhatsappModal(null);
+            }
+          }}
+        />
       )}
     </div>
   );

@@ -1,3 +1,55 @@
+/**
+ * Try to share a file via the Web Share API (mobile-first).
+ * Falls back to downloading the file and opening a WhatsApp chat on desktop.
+ *
+ * @param {Blob} blob        – the file blob to share
+ * @param {string} fileName  – desired file name (e.g. "facture-12.pdf")
+ * @param {string} phone     – WhatsApp phone number (any format; digits are extracted)
+ */
+export async function sendViaWhatsApp(blob, fileName, phone) {
+  const cleanPhone = phone.replace(/\D/g, '');
+  const file = new File([blob], fileName, { type: blob.type || 'application/pdf' });
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  if (isMobile) {
+    // Mobile: use native Web Share API so the OS share sheet opens and the
+    // user can pick WhatsApp directly with the file already attached.
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: fileName });
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return; // user cancelled
+        // fall through to deep-link fallback
+      }
+    }
+    // Deep-link fallback for mobile when Web Share is unavailable
+    if (cleanPhone) {
+      window.location.href = `whatsapp://send?phone=${cleanPhone}`;
+    }
+    return;
+  }
+
+  // Desktop / Web: download the file first, then open WhatsApp Web directly
+  // (web.whatsapp.com/send) so the correct chat is already open and ready.
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  if (cleanPhone) {
+    const text = encodeURIComponent(
+      `Bonjour, veuillez trouver ci-joint le document : ${fileName}`
+    );
+    // Small delay so the download dialog has time to appear before the new tab.
+    setTimeout(() => {
+      window.open(`https://web.whatsapp.com/send?phone=${cleanPhone}&text=${text}`, '_blank');
+    }, 500);
+  }
+}
+
 export async function exportToPDF(columns, data, filename = 'export') {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
@@ -76,7 +128,7 @@ export async function exportToExcel(columns, data, filename = 'export') {
   saveAs(new Blob([buf], { type: 'application/octet-stream' }), `${filename}.xlsx`);
 }
 
-export async function exportCashAdvanceInvoice(advance, t) {
+export async function exportCashAdvanceInvoice(advance, t, { returnBlob = false } = {}) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -181,5 +233,8 @@ export async function exportCashAdvanceInvoice(advance, t) {
   doc.setTextColor(150);
   doc.text('Logistique internationale — RDC', pw / 2, ph - 8, { align: 'center' });
 
+  if (returnBlob) {
+    return doc.output('blob');
+  }
   doc.save(`avance-${advance.reference}.pdf`);
 }

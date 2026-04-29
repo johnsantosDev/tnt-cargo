@@ -5,7 +5,9 @@ import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal } from '../components/ui';
 import SearchableSelect from '../components/ui/SearchableSelect';
-import { Plus, Search, Edit2, Trash2, Download, Eye } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Download, Eye, MessageCircle } from 'lucide-react';
+import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
+import { sendViaWhatsApp } from '../utils/export';
 import ExportButtons from '../components/ui/ExportButtons';
 import toast from 'react-hot-toast';
 
@@ -20,6 +22,7 @@ export default function PaymentsPage() {
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editData, setEditData] = useState(null);
+  const [whatsappModal, setWhatsappModal] = useState(null);
 
   const fetchPayments = useCallback(() => {
     setLoading(true);
@@ -81,6 +84,17 @@ export default function PaymentsPage() {
           >
             <Download className="w-4 h-4" />
           </button>
+          <button
+            onClick={() => setWhatsappModal({
+              phone: row.client?.phone || '',
+              fileName: `recu-${row.client?.name || ''}-${row.reference}.pdf`,
+              getBlob: async () => { const r = await api.get(`/payments/${row.id}/pdf`, { responseType: 'blob' }); return r.data; },
+            })}
+            className="p-1.5 text-gray-400 hover:text-green-500"
+            title="Envoyer via WhatsApp"
+          >
+            <MessageCircle className="w-4 h-4" />
+          </button>
           {hasPermission('payments.edit') && <button onClick={() => { setEditData(row); setShowForm(true); }} className="p-1.5 text-gray-400 hover:text-primary-600"><Edit2 className="w-4 h-4" /></button>}
           {hasPermission('payments.delete') && <button onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>}
         </div>
@@ -120,6 +134,19 @@ export default function PaymentsPage() {
       </Card>
 
       {showForm && <PaymentFormModal data={editData} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); fetchPayments(); }} />}
+      {whatsappModal && (
+        <WhatsAppSendModal
+          phone={whatsappModal.phone}
+          onClose={() => setWhatsappModal(null)}
+          onSend={async (phone) => {
+            try {
+              const blob = await whatsappModal.getBlob();
+              await sendViaWhatsApp(blob, whatsappModal.fileName, phone);
+            } catch { toast.error(t('common.error')); }
+            finally { setWhatsappModal(null); }
+          }}
+        />
+      )}
     </div>
   );
 }

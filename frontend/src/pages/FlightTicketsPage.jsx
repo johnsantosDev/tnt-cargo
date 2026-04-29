@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal, Textarea } from '../components/ui';
-import { Plus, Search, Download, Eye, Plane, Edit, Trash2, RotateCcw, Upload, Paperclip } from 'lucide-react';
+import { Plus, Search, Download, Eye, Plane, Edit, Trash2, RotateCcw, Upload, Paperclip, MessageCircle } from 'lucide-react';
+import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
+import { sendViaWhatsApp } from '../utils/export';
 import ExportButtons from '../components/ui/ExportButtons';
 import toast from 'react-hot-toast';
 
@@ -70,6 +72,7 @@ export default function FlightTicketsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editTicket, setEditTicket] = useState(null);
   const [showDetail, setShowDetail] = useState(null);
+  const [whatsappModal, setWhatsappModal] = useState(null);
 
   const fetchTickets = useCallback(() => {
     setLoading(true);
@@ -104,7 +107,7 @@ export default function FlightTicketsPage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-    } catch (err) {
+    } catch {
       toast.error(t('common.error'));
     }
   };
@@ -157,6 +160,15 @@ export default function FlightTicketsPage() {
           <button onClick={() => setShowDetail(row)} className="p-1.5 text-gray-400 hover:text-primary-600" title={t('common.view')}><Eye className="w-4 h-4" /></button>
           <button onClick={() => setEditTicket(row)} className="p-1.5 text-gray-400 hover:text-blue-600" title={t('common.edit')}><Edit className="w-4 h-4" /></button>
           <button onClick={() => handleDownload(row.id)} className="p-1.5 text-gray-400 hover:text-green-600" title={t('flight_tickets.receipt')}><Download className="w-4 h-4" /></button>
+          <button
+            onClick={() => setWhatsappModal({
+              phone: row.client?.phone || row.passenger_phone || '',
+              fileName: `receipt-${row.id}.pdf`,
+              getBlob: async () => { const r = await api.get(`/flight-tickets/${row.id}/receipt`, { responseType: 'blob' }); return r.data; },
+            })}
+            className="p-1.5 text-gray-400 hover:text-green-500"
+            title="Envoyer via WhatsApp"
+          ><MessageCircle className="w-4 h-4" /></button>
           <button onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-400 hover:text-red-600" title={t('common.delete')}><Trash2 className="w-4 h-4" /></button>
         </div>
       )
@@ -239,7 +251,25 @@ export default function FlightTicketsPage() {
           ticket={showDetail}
           onClose={() => setShowDetail(null)}
           onDownload={handleDownload}
+          onWhatsApp={(ticket) => setWhatsappModal({
+            phone: ticket.client?.phone || ticket.passenger_phone || '',
+            fileName: `receipt-${ticket.id}.pdf`,
+            getBlob: async () => { const r = await api.get(`/flight-tickets/${ticket.id}/receipt`, { responseType: 'blob' }); return r.data; },
+          })}
           onEdit={(t) => { setShowDetail(null); setEditTicket(t); setShowForm(true); }}
+        />
+      )}
+      {whatsappModal && (
+        <WhatsAppSendModal
+          phone={whatsappModal.phone}
+          onClose={() => setWhatsappModal(null)}
+          onSend={async (phone) => {
+            try {
+              const blob = await whatsappModal.getBlob();
+              await sendViaWhatsApp(blob, whatsappModal.fileName, phone);
+            } catch { toast.error(t('common.error')); }
+            finally { setWhatsappModal(null); }
+          }}
         />
       )}
     </div>
@@ -716,7 +746,7 @@ function TicketFormModal({ ticket, onClose, onSaved }) {
 }
 
 /* ─── Ticket Detail Modal ─── */
-function TicketDetailModal({ ticket, onClose, onDownload, onEdit }) {
+function TicketDetailModal({ ticket, onClose, onDownload, onWhatsApp, onEdit }) {
   const { t } = useTranslation();
   const formatMoney = (v) => `${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} ${ticket.currency}`;
   const formatDateTime = (d) => d ? new Date(d).toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' }) : '-';
@@ -746,6 +776,13 @@ function TicketDetailModal({ ticket, onClose, onDownload, onEdit }) {
             <Button size="sm" variant="secondary" onClick={() => onEdit(ticket)}>
               <Edit className="w-4 h-4 mr-1" />{t('common.edit')}
             </Button>
+            <button
+              onClick={() => onWhatsApp(ticket)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-white bg-green-500 hover:bg-green-600 rounded-lg"
+              title="Envoyer via WhatsApp"
+            >
+              <MessageCircle className="w-4 h-4" />WhatsApp
+            </button>
             <Button size="sm" onClick={() => onDownload(ticket.id)}>
               <Download className="w-4 h-4 mr-1" />{t('flight_tickets.receipt')}
             </Button>
