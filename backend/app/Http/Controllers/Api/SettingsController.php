@@ -48,7 +48,7 @@ class SettingsController extends Controller
 
     public function deleteUser(User $user): JsonResponse
     {
-        if (!auth()->user()->hasAnyRole(['admin', 'manager'])) {
+        if (!auth()->user()->hasRole('admin')) {
             return response()->json(['message' => 'Non autorisé.'], 403);
         }
 
@@ -122,29 +122,35 @@ class SettingsController extends Controller
 
     public function createUser(Request $request): JsonResponse
     {
-        if (!$request->user()->hasAnyRole(['admin', 'manager'])) {
+            if (!$request->user()->hasAnyRole(['admin', 'manager'])) {
             return response()->json(['message' => 'Non autorisé.'], 403);
         }
 
-        $validated = $request->validate([
+        $rules = [
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users',
             'password' => 'required|string|min:8',
             'phone' => 'nullable|string|max:20',
-            'role' => 'required|exists:roles,name',
             'locale' => 'nullable|in:fr,en',
-        'region' => 'nullable|string|max:100',
-    ]);
+            'region' => 'nullable|string|max:100',
+        ];
 
-    $user = User::create([
-        'name' => $validated['name'],
-        'email' => $validated['email'],
-        'password' => $validated['password'],
-        'phone' => $validated['phone'] ?? null,
-        'locale' => $validated['locale'] ?? 'fr',
-        'region' => $validated['region'] ?? null,
-    ]);
-    $user->assignRole($validated['role']);
+        if ($request->user()->hasRole('admin')) {
+            $rules['role'] = 'required|exists:roles,name';
+        }
+
+        $validated = $request->validate($rules);
+
+        $user = User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => $validated['password'],
+            'phone' => $validated['phone'] ?? null,
+            'locale' => $validated['locale'] ?? 'fr',
+            'region' => $validated['region'] ?? null,
+        ]);
+
+        $user->assignRole($validated['role'] ?? 'agent');
 
         AuditService::log('created', $user, null, $user->toArray());
 
@@ -160,17 +166,22 @@ class SettingsController extends Controller
             return response()->json(['message' => 'Non autorisé.'], 403);
         }
 
-        $validated = $request->validate([
+        $rules = [
             'name' => 'sometimes|string|max:255',
             'email' => 'sometimes|email|unique:users,email,' . $user->id,
             'phone' => 'nullable|string|max:20',
-            'role' => 'sometimes|exists:roles,name',
             'is_active' => 'sometimes|boolean',
             'locale' => 'nullable|in:fr,en',
             'region' => 'nullable|string|max:100',
-        ]);
+        ];
 
-        if (isset($validated['role'])) {
+        if ($request->user()->hasRole('admin')) {
+            $rules['role'] = 'sometimes|exists:roles,name';
+        }
+
+        $validated = $request->validate($rules);
+
+        if (isset($validated['role']) && $request->user()->hasRole('admin')) {
             $user->syncRoles([$validated['role']]);
             unset($validated['role']);
         }
@@ -192,7 +203,9 @@ class SettingsController extends Controller
     {
         $query = AuditLog::with('user');
 
-        if ($request->filled('user_id')) {
+        if (!$request->user()->hasRole('admin')) {
+            $query->where('user_id', $request->user()->id);
+        } elseif ($request->filled('user_id')) {
             $query->where('user_id', $request->user_id);
         }
         if ($request->filled('action')) {

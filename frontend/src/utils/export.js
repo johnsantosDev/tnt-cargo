@@ -30,8 +30,8 @@ export async function sendViaWhatsApp(blob, fileName, phone) {
     return;
   }
 
-  // Desktop / Web: download the file first, then open WhatsApp Web directly
-  // (web.whatsapp.com/send) so the correct chat is already open and ready.
+  // Desktop / Web: download the file first, then open WhatsApp Desktop if
+  // available, otherwise fallback to WhatsApp Web.
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -43,10 +43,19 @@ export async function sendViaWhatsApp(blob, fileName, phone) {
     const text = encodeURIComponent(
       `Bonjour, veuillez trouver ci-joint le document : ${fileName}`
     );
-    // Small delay so the download dialog has time to appear before the new tab.
-    setTimeout(() => {
-      window.open(`https://web.whatsapp.com/send?phone=${cleanPhone}&text=${text}`, '_blank');
-    }, 500);
+    const whatsappDesktopUrl = `whatsapp://send?phone=${cleanPhone}&text=${text}`;
+    const whatsappWebUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${text}`;
+
+    const fallback = setTimeout(() => {
+      window.open(whatsappWebUrl, '_blank');
+    }, 1200);
+
+    const handleVisibility = () => {
+      if (document.hidden) clearTimeout(fallback);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility, { once: true });
+    window.location.href = whatsappDesktopUrl;
   }
 }
 

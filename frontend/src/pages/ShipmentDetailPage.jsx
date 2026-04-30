@@ -190,30 +190,32 @@ export default function ShipmentDetailPage() {
             </h3>
           </CardHeader>
           <CardBody>
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl mb-4">
-              <Link2 className="w-5 h-5 text-gray-400 shrink-0" />
-              <code className="flex-1 text-sm text-gray-700 break-all select-all">{`${window.location.origin}/t/${shipment.share_token}`}</code>
-              <button
-                onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/t/${shipment.share_token}`); }}
-                className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                title={t('shipments.copy_link')}
-              >
-                <Copy className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  const phone = shipment.client?.phone?.replace(/[^0-9]/g, '') || '';
-                  const clientName = shipment.client?.name || '';
-                  const msg = encodeURIComponent(`Bonjour ${clientName}, ${t('shipments.share_message')}\n${window.location.origin}/t/${shipment.share_token}\n— TNT Cargo`);
-                  window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
-              >
-                <MessageCircle className="w-4 h-4" />
-                WhatsApp
-              </button>
+            {shipment.share_token && (
+              <>
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl mb-4">
+                  <Link2 className="w-5 h-5 text-gray-400 shrink-0" />
+                  <code className="flex-1 text-sm text-gray-700 break-all select-all">{`${window.location.origin}/tracking?t=${shipment.share_token}`}</code>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/tracking?t=${shipment.share_token}`); }}
+                    className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                    title={t('shipments.copy_link')}
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const phone = shipment.client?.phone?.replace(/[^0-9]/g, '') || '';
+                      const clientName = shipment.client?.name || '';
+                      const msg = encodeURIComponent(`Bonjour ${clientName}, ${t('shipments.share_message')}\n${window.location.origin}/tracking?t=${shipment.share_token}\n— TNT Cargo`);
+                      window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    WhatsApp
+                  </button>
               <button
                 onClick={() => {
                   const email = shipment.client?.email || '';

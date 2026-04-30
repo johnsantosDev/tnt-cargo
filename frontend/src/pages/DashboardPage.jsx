@@ -23,6 +23,7 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const { user, hasRole } = useAuth();
   const isManager = hasRole('admin') || hasRole('manager');
+  const canViewFinance = hasRole('admin') || hasRole('manager') || hasRole('finance');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('month');
@@ -44,6 +45,7 @@ export default function DashboardPage() {
   const { kpis, charts, recent, alerts } = data;
 
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  const displayMoney = (v) => canViewFinance ? formatMoney(v) : '—';
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -87,16 +89,16 @@ export default function DashboardPage() {
       {/* KPI Cards - Row 1 */}
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12 sm:col-span-6 xl:col-span-3">
-          <KPICard title={t('dashboard.revenue')} value={formatMoney(kpis.total_revenue)} icon={DollarSign} color="green" />
+          <KPICard title={t('dashboard.revenue')} value={displayMoney(kpis.total_revenue)} icon={DollarSign} color="green" />
         </div>
         <div className="col-span-12 sm:col-span-6 xl:col-span-3">
-          <KPICard title={t('dashboard.profit')} value={formatMoney(kpis.net_profit)} icon={TrendingUp} color="blue" />
+          <KPICard title={t('dashboard.profit')} value={displayMoney(kpis.net_profit)} icon={TrendingUp} color="blue" />
         </div>
         <div className="col-span-12 sm:col-span-6 xl:col-span-3">
           <KPICard title={t('dashboard.active_shipments')} value={kpis.active_shipments} icon={Package} color="primary" />
         </div>
         <div className="col-span-12 sm:col-span-6 xl:col-span-3">
-          <KPICard title={t('dashboard.total_debt')} value={formatMoney(kpis.total_debt)} icon={AlertTriangle} color="red" />
+          <KPICard title={t('dashboard.total_debt')} value={displayMoney(kpis.total_debt)} icon={AlertTriangle} color="red" />
         </div>
       </div>
 
@@ -106,13 +108,13 @@ export default function DashboardPage() {
           <KPICard title={t('dashboard.shipments')} value={kpis.total_shipments} icon={Package} color="purple" />
         </div>
         <div className="col-span-12 sm:col-span-6 xl:col-span-3">
-          <KPICard title={t('dashboard.expenses')} value={formatMoney(kpis.total_expenses)} icon={CreditCard} color="yellow" />
+          <KPICard title={t('dashboard.expenses')} value={displayMoney(kpis.total_expenses)} icon={CreditCard} color="yellow" />
         </div>
         <div className="col-span-12 sm:col-span-6 xl:col-span-3">
           <KPICard title={t('dashboard.total_clients')} value={kpis.total_clients} icon={Users} color="blue" />
         </div>
         <div className="col-span-12 sm:col-span-6 xl:col-span-3">
-          <KPICard title={t('dashboard.pending_advances')} value={formatMoney(kpis.pending_cash_advances)} icon={Banknote} color="purple" />
+          <KPICard title={t('dashboard.pending_advances')} value={displayMoney(kpis.pending_cash_advances)} icon={Banknote} color="purple" />
         </div>
       </div>
 
@@ -120,10 +122,10 @@ export default function DashboardPage() {
       {data.daily && (
         <div className="grid grid-cols-12 gap-6">
           <div className="col-span-12 sm:col-span-4">
-            <KPICard title={t('dashboard.today_revenue')} value={formatMoney(data.daily.revenue)} icon={DollarSign} color="green" />
+            <KPICard title={t('dashboard.today_revenue')} value={displayMoney(data.daily.revenue)} icon={DollarSign} color="green" />
           </div>
           <div className="col-span-12 sm:col-span-4">
-            <KPICard title={t('dashboard.today_expenses')} value={formatMoney(data.daily.expenses)} icon={CreditCard} color="red" />
+            <KPICard title={t('dashboard.today_expenses')} value={displayMoney(data.daily.expenses)} icon={CreditCard} color="red" />
           </div>
           <div className="col-span-12 sm:col-span-4">
             <KPICard title={t('dashboard.today_shipments')} value={data.daily.shipments} icon={Package} color="blue" />

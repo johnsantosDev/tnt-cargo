@@ -12,12 +12,14 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general');
 
   const canManageUsers = hasRole('admin') || hasRole('manager');
+  const isAdmin = hasRole('admin');
+  const canManageRoles = isAdmin;
 
   const tabs = [
     { key: 'general', label: t('settings.general'), icon: Settings },
     { key: 'account', label: t('settings.my_account') || 'Mon compte', icon: KeyRound },
     ...(canManageUsers ? [{ key: 'users', label: t('settings.users'), icon: Users }] : []),
-    ...(canManageUsers ? [{ key: 'roles', label: t('settings.roles'), icon: Shield }] : []),
+    ...(canManageRoles ? [{ key: 'roles', label: t('settings.roles'), icon: Shield }] : []),
     { key: 'audit', label: t('settings.audit_logs'), icon: Clock }
   ];
 
@@ -39,8 +41,8 @@ export default function SettingsPage() {
 
       {activeTab === 'general' && <GeneralSettings />}
       {activeTab === 'account' && <MyAccountSettings />}
-      {activeTab === 'users' && canManageUsers && <UsersSettings />}
-      {activeTab === 'roles' && canManageUsers && <RolesSettings />}
+      {activeTab === 'users' && canManageUsers && <UsersSettings isAdmin={isAdmin} />}
+      {activeTab === 'roles' && canManageRoles && <RolesSettings />}
       {activeTab === 'audit' && <AuditLogs />}
     </div>
   );
@@ -141,7 +143,7 @@ function MyAccountSettings() {
   );
 }
 
-function UsersSettings() {
+function UsersSettings({ isAdmin }) {
   const { t } = useTranslation();
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -180,7 +182,9 @@ function UsersSettings() {
       key: 'actions', label: '', render: (row) => (
         <div className="flex gap-1">
           <button onClick={() => { setEditData(row); setShowForm(true); }} className="p-1.5 text-gray-400 hover:text-primary-600"><Edit2 className="w-4 h-4" /></button>
-          <button onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+          {isAdmin && (
+            <button onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+          )}
         </div>
       )
     }
@@ -202,12 +206,12 @@ function UsersSettings() {
         )}
       </Card>
 
-      {showForm && <UserFormModal data={editData} roles={roles} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); fetchUsers(); }} />}
+      {showForm && <UserFormModal isAdmin={isAdmin} data={editData} roles={roles} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); fetchUsers(); }} />}
     </div>
   );
 }
 
-function UserFormModal({ data, roles, onClose, onSaved }) {
+function UserFormModal({ isAdmin, data, roles, onClose, onSaved }) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -224,6 +228,9 @@ function UserFormModal({ data, roles, onClose, onSaved }) {
     setErrors({});
     const payload = { ...form };
     if (!payload.password) { delete payload.password; delete payload.password_confirmation; }
+    if (!isAdmin) {
+      delete payload.role;
+    }
     try {
       if (data?.id) await api.put(`/settings/users/${data.id}`, payload);
       else await api.post('/settings/users', payload);
@@ -246,9 +253,13 @@ function UserFormModal({ data, roles, onClose, onSaved }) {
           <Input label={t('settings.password_confirmation')} type="password" value={form.password_confirmation} onChange={set('password_confirmation')} required={!data} />
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <Select label={t('settings.role')} value={form.role} onChange={set('role')}>
-            {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
-          </Select>
+          {isAdmin ? (
+            <Select label={t('settings.role')} value={form.role} onChange={set('role')}>
+              {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
+            </Select>
+          ) : (
+            <Input label={t('settings.role')} value={form.role} disabled />
+          )}
           <Select label={t('settings.active')} value={form.is_active} onChange={(e) => setForm((p) => ({ ...p, is_active: e.target.value === 'true' }))}>
             <option value="true">Actif</option>
             <option value="false">Inactif</option>

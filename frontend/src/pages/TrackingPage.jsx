@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { Package, CheckCircle, Clock, MapPin, ArrowLeft, AlertCircle, Truck, Warehouse, Anchor, Box, CircleDot, Plane } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -9,16 +9,19 @@ export default function TrackingPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { trackingNumber, shareToken } = useParams();
+  const [searchParams] = useSearchParams();
+  const shareTokenParam = searchParams.get('t');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [searchInput, setSearchInput] = useState(trackingNumber || '');
+  const [searchInput, setSearchInput] = useState(trackingNumber || shareTokenParam || '');
 
   useEffect(() => {
-    if (trackingNumber || shareToken) {
+    const token = shareToken || shareTokenParam;
+    if (trackingNumber || token) {
       setLoading(true);
       setError(false);
-      const url = shareToken ? `/track/share/${shareToken}` : `/track/${trackingNumber}`;
+      const url = token ? `/track/share/${token}` : `/track/${trackingNumber}`;
       api.get(url)
         .then(({ data }) => setData(data))
         .catch(() => setError(true))
@@ -26,7 +29,7 @@ export default function TrackingPage() {
     } else {
       setLoading(false);
     }
-  }, [trackingNumber, shareToken]);
+  }, [trackingNumber, shareToken, shareTokenParam]);
 
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
   const formatTime = (d) => d ? new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';

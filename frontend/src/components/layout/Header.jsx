@@ -316,10 +316,15 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
                 <div className="w-8 h-8 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center text-sm font-semibold">
                   {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                 </div>
-                <div className="hidden md:flex items-center truncate">
+                <div className="hidden md:flex items-center gap-2 truncate">
                   <span className="text-sm font-medium text-gray-600 group-hover:text-gray-800 truncate">
                     {user?.name || 'User'}
                   </span>
+                  {user?.region && (
+                    <span className="hidden lg:inline-flex items-center px-2 py-0.5 text-xs font-medium text-primary-700 bg-primary-100 rounded-full">
+                      {user.region}
+                    </span>
+                  )}
                   <svg className="w-3 h-3 ml-1 text-gray-400 shrink-0" viewBox="0 0 12 12">
                     <path d="M5.9 11.4L.5 6l1.4-1.4 4 4 4-4L11.3 6z" fill="currentColor" />
                   </svg>
@@ -334,6 +339,7 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
                   <div className="px-3 py-2 border-b border-gray-100 mb-1">
                     <div className="text-sm font-medium text-gray-800">{user?.name}</div>
                     <div className="text-xs text-gray-500 italic">{user?.email}</div>
+                    {user?.region && <div className="text-xs text-gray-500">{user.region}</div>}
                   </div>
                   <button
                     onClick={() => { setDropdownOpen(false); navigate('/dashboard/settings'); }}
