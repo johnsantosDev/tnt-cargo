@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal } from '../components/ui';
-import { Plus, Search, Download, FileText, Eye, MessageCircle } from 'lucide-react';
+import { Plus, Search, Download, FileText, Eye, MessageCircle, Trash2 } from 'lucide-react';
 import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
 import { sendViaWhatsApp } from '../utils/export';
 import ExportButtons from '../components/ui/ExportButtons';
@@ -11,7 +11,8 @@ import toast from 'react-hot-toast';
 
 export default function InvoicesPage() {
   const { t } = useTranslation();
-  const { hasPermission } = useAuth();
+  const { hasPermission, hasRole } = useAuth();
+  const isManager = hasRole('admin') || hasRole('manager');
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [meta, setMeta] = useState({});
@@ -66,6 +67,18 @@ export default function InvoicesPage() {
     }
   };
 
+  const handleDelete = async (id) => {
+    if (!window.confirm(t('common.confirm_delete'))) return;
+    try {
+      await api.delete(`/invoices/${id}`);
+      if (showDetail?.id === id) setShowDetail(null);
+      fetchInvoices();
+      toast.success(t('common.deleted'));
+    } catch (err) {
+      toast.error(err.response?.data?.message || t('common.error'));
+    }
+  };
+
   const statusBadge = (status) => {
     const map = { draft: 'gray', sent: 'blue', paid: 'green', overdue: 'red', cancelled: 'red' };
     const labels = { draft: 'Brouillon', sent: 'Envoyée', paid: 'Payée', overdue: 'En retard', cancelled: 'Annulée' };
@@ -98,6 +111,11 @@ export default function InvoicesPage() {
             className="p-1.5 text-gray-400 hover:text-green-500"
             title="Envoyer via WhatsApp"
           ><MessageCircle className="w-4 h-4" /></button>
+          {isManager && (
+            <button onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-400 hover:text-red-600" title={t('common.delete')}>
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
         </div>
       )
     }

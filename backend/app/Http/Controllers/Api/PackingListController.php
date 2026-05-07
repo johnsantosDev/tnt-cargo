@@ -134,8 +134,12 @@ class PackingListController extends Controller
         ]);
     }
 
-    public function destroy(PackingList $packingList): JsonResponse
+    public function destroy(Request $request, PackingList $packingList): JsonResponse
     {
+        if (!$request->user()->hasAnyRole(['admin', 'manager'])) {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
         AuditService::log('deleted', $packingList, $packingList->toArray(), null);
         $packingList->delete();
 

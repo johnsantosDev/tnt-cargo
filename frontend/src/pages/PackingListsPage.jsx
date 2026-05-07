@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select, Pagination, Badge, Modal, Textarea } from '../components/ui';
 import SearchableSelect from '../components/ui/SearchableSelect';
 import { Plus, Search, Eye, Package, CheckCircle, FileText, Trash2, Edit3, Box, Settings2, Truck, DollarSign, Download, MessageCircle } from 'lucide-react';
@@ -12,6 +13,8 @@ import toast from 'react-hot-toast';
 
 export default function PackingListsPage() {
   const { t } = useTranslation();
+  const { hasRole } = useAuth();
+  const isManager = hasRole('admin') || hasRole('manager');
   const navigate = useNavigate();
   const [lists, setLists] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -202,7 +205,7 @@ export default function PackingListsPage() {
                         <td className="px-4 py-3 whitespace-nowrap">
                           <div className="flex gap-1">
                             <button onClick={() => setShowDetail(row)} className="p-1.5 text-gray-400 hover:text-primary-600"><Eye className="w-4 h-4" /></button>
-                            {row.status === 'draft' && <button onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>}
+                            {isManager && <button onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>}
                           </div>
                         </td>
                       </tr>
