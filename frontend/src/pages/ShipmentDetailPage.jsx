@@ -230,6 +230,8 @@ export default function ShipmentDetailPage() {
                 Email
               </button>
             </div>
+              </>
+            )}
           </CardBody>
         </Card>
       )}

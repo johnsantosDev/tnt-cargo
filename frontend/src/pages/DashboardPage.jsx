@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -28,15 +28,26 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('month');
   const [region, setRegion] = useState('');
+  const latestRequestRef = useRef(0);
 
   useEffect(() => {
+    const requestId = Date.now();
+    latestRequestRef.current = requestId;
     setLoading(true);
     const params = new URLSearchParams({ period });
     if (region) params.append('region', region);
     api.get(`/dashboard?${params.toString()}`)
-      .then(({ data }) => setData(data))
+      .then(({ data }) => {
+        if (latestRequestRef.current === requestId) {
+          setData(data);
+        }
+      })
       .catch(console.error)
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (latestRequestRef.current === requestId) {
+          setLoading(false);
+        }
+      });
   }, [period, region]);
 
   if (loading) return <div className="flex items-center justify-center h-64"><Spinner /></div>;

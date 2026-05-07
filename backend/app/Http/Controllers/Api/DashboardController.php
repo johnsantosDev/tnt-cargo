@@ -20,28 +20,29 @@ class DashboardController extends Controller
     {
         $period = $request->get('period', 'month');
         $startDate = match ($period) {
-            'day', 'daily' => now()->startOfDay(),
-            'week' => now()->startOfWeek(),
-            'month' => now()->startOfMonth(),
-            'year' => now()->startOfYear(),
-            default => now()->startOfMonth(),
+            'day', 'daily' => now()->copy()->startOfDay(),
+            'week', 'weekly' => now()->copy()->startOfWeek(),
+            'month', 'monthly' => now()->copy()->startOfMonth(),
+            'year', 'yearly' => now()->copy()->startOfYear(),
+            default => now()->copy()->startOfMonth(),
         };
+        $endDate = now()->copy()->endOfDay();
 
         $user = $request->user();
         $isManager = RegionContext::isManager($user);
 
         $revenueQuery = Payment::where('type', 'income')
             ->where('status', 'completed')
-            ->where('payment_date', '>=', $startDate);
+            ->whereBetween('payment_date', [$startDate, $endDate]);
         RegionContext::apply($revenueQuery, $request);
         $totalRevenue = $revenueQuery->sum('amount');
 
         $expenseQuery = Expense::where('status', 'approved')
-            ->where('expense_date', '>=', $startDate);
+            ->whereBetween('expense_date', [$startDate, $endDate]);
         RegionContext::apply($expenseQuery, $request);
         $totalExpenses = $expenseQuery->sum('amount');
 
-        $shipmentQuery = Shipment::where('created_at', '>=', $startDate);
+        $shipmentQuery = Shipment::whereBetween('created_at', [$startDate, $endDate]);
         RegionContext::apply($shipmentQuery, $request);
         $totalShipments = $shipmentQuery->count();
 
@@ -60,7 +61,7 @@ class DashboardController extends Controller
 
         $revenueChartQuery = Payment::where('type', 'income')
             ->where('status', 'completed')
-            ->where('payment_date', '>=', $startDate)
+            ->whereBetween('payment_date', [$startDate, $endDate])
             ->selectRaw("DATE(payment_date) as date, SUM(amount) as total")
             ->groupBy('date')
             ->orderBy('date');

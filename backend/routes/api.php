@@ -89,7 +89,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/packing-lists/{packingList}/receipt', [PackingListController::class, 'downloadReceipt']);
 
     // Transfers (Procurement)
-    Route::apiResource('transfers', TransferController::class)->only(['index', 'store', 'show']);
+    Route::apiResource('transfers', TransferController::class)->only(['index', 'store', 'show', 'destroy']);
     Route::post('/transfers/{transfer}/approve', [TransferController::class, 'approve']);
     Route::post('/transfers/{transfer}/reject', [TransferController::class, 'reject']);
     Route::post('/transfers/{transfer}/complete', [TransferController::class, 'complete']);

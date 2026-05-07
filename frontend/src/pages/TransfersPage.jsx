@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { Card, CardHeader, CardBody, Spinner, Badge, Pagination, Modal } from '../components/ui';
-import { ArrowRightLeft, Plus, Search, Check, X, Download, Eye, Upload, FileText, CheckCircle, MessageCircle } from 'lucide-react';
+import { ArrowRightLeft, Plus, Search, Check, X, Download, Eye, Upload, FileText, CheckCircle, MessageCircle, Trash2 } from 'lucide-react';
 import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
 import { sendViaWhatsApp } from '../utils/export';
 import toast from 'react-hot-toast';
@@ -163,6 +163,20 @@ export default function TransfersPage() {
     }
   };
 
+  const handleDelete = async (id) => {
+    if (!window.confirm(t('common.confirm_delete'))) return;
+    try {
+      await api.delete(`/transfers/${id}`);
+      if (showDetail?.id === id) {
+        setShowDetail(null);
+      }
+      fetchTransfers();
+      toast.success(t('common.deleted'));
+    } catch (err) {
+      toast.error(err.response?.data?.message || t('common.error'));
+    }
+  };
+
   const downloadReceipt = async (id) => {
     try {
       const { data } = await api.get(`/transfers/${id}/receipt`, { responseType: 'blob' });
@@ -310,6 +324,9 @@ export default function TransfersPage() {
                               </button>
                             </>
                           )}
+                          <button onClick={() => handleDelete(tr.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50" title={t('common.delete')}>
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>

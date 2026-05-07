@@ -92,6 +92,33 @@ class TransferController extends Controller
         return response()->json(['data' => $transfer->load(['client', 'creator', 'approver', 'completer'])]);
     }
 
+    public function destroy(Request $request, Transfer $transfer): JsonResponse
+    {
+        $user = $request->user();
+        $isManager = $user->hasAnyRole(['admin', 'manager']);
+        $isOwner = (int) $transfer->created_by === (int) $user->id;
+
+        if (!$isManager && !$isOwner) {
+            return response()->json(['message' => 'Vous n\'avez pas la permission de supprimer ce transfer.'], 403);
+        }
+
+        if (!$isManager && $transfer->status !== 'pending_approval') {
+            return response()->json(['message' => 'Vous pouvez uniquement supprimer un transfer en attente.'], 422);
+        }
+
+        if ($transfer->document_path && Storage::disk('public')->exists($transfer->document_path)) {
+            Storage::disk('public')->delete($transfer->document_path);
+        }
+        if ($transfer->signed_document_path && Storage::disk('public')->exists($transfer->signed_document_path)) {
+            Storage::disk('public')->delete($transfer->signed_document_path);
+        }
+
+        AuditService::log('deleted', $transfer, $transfer->toArray(), null);
+        $transfer->delete();
+
+        return response()->json(['message' => 'Transfer supprimé avec succès.']);
+    }
+
     public function approve(Request $request, Transfer $transfer): JsonResponse
     {
         if (!$request->user()->hasAnyRole(['admin', 'manager'])) {
