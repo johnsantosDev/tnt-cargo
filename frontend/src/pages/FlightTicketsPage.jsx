@@ -61,7 +61,8 @@ const AIRPORTS = [
 
 export default function FlightTicketsPage() {
   const { t } = useTranslation();
-  const { hasPermission } = useAuth();
+  const { hasRole } = useAuth();
+  const isManager = hasRole('admin') || hasRole('manager');
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [meta, setMeta] = useState({});
@@ -169,7 +170,9 @@ export default function FlightTicketsPage() {
             className="p-1.5 text-gray-400 hover:text-green-500"
             title="Envoyer via WhatsApp"
           ><MessageCircle className="w-4 h-4" /></button>
-          <button onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-400 hover:text-red-600" title={t('common.delete')}><Trash2 className="w-4 h-4" /></button>
+          {isManager && (
+            <button onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-400 hover:text-red-600" title={t('common.delete')}><Trash2 className="w-4 h-4" /></button>
+          )}
         </div>
       )
     }

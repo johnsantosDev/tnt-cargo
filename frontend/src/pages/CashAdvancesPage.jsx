@@ -4,7 +4,7 @@ import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardHeader, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal, Textarea } from '../components/ui';
 import SearchableSelect from '../components/ui/SearchableSelect';
-import { Plus, Search, DollarSign, Edit2, Eye, Printer, MessageCircle } from 'lucide-react';
+import { Plus, Search, DollarSign, Edit2, Eye, Printer, MessageCircle, Trash2 } from 'lucide-react';
 import { exportCashAdvanceInvoice, sendViaWhatsApp } from '../utils/export';
 import ExportButtons from '../components/ui/ExportButtons';
 import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
@@ -46,6 +46,19 @@ export default function CashAdvancesPage() {
     const labels = { pending: 'En cours', partial: 'Partiel', paid: 'Payé', overdue: 'En retard' };
     return <Badge variant={map[status] || 'gray'}>{labels[status] || status}</Badge>;
   };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm(t('common.confirm_delete'))) return;
+    try {
+      await api.delete(`/cash-advances/${id}`);
+      if (showDetail?.id === id) setShowDetail(null);
+      if (showPayment?.id === id) setShowPayment(null);
+      fetchAdvances();
+      toast.success(t('common.deleted'));
+    } catch (err) {
+      toast.error(err.response?.data?.message || t('common.error'));
+    }
+  };
   
 
   const columns = [
@@ -63,6 +76,11 @@ export default function CashAdvancesPage() {
           <button onClick={() => setShowDetail(row)} className="p-1.5 text-gray-400 hover:text-primary-600"><Eye className="w-4 h-4" /></button>
           {row.status !== 'paid' && hasPermission('cash_advances.edit') && (
             <button onClick={() => setShowPayment(row)} className="p-1.5 text-gray-400 hover:text-green-600" title="Ajouter paiement"><DollarSign className="w-4 h-4" /></button>
+          )}
+          {hasPermission('cash_advances.delete') && (
+            <button onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title={t('common.delete')}>
+              <Trash2 className="w-4 h-4" />
+            </button>
           )}
         </div>
       )

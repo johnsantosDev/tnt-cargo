@@ -324,9 +324,11 @@ export default function TransfersPage() {
                               </button>
                             </>
                           )}
-                          <button onClick={() => handleDelete(tr.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50" title={t('common.delete')}>
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {isManager && (
+                            <button onClick={() => handleDelete(tr.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50" title={t('common.delete')}>
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -4,9 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardHeader, CardBody, Button, Input, Select, Table, Pagination, StatusBadge, Spinner, Modal, Badge } from '../components/ui';
-import { Plus, Search, Filter, Eye, FileText, Upload, X } from 'lucide-react';
+import { Plus, Search, Filter, Eye, FileText, Upload, X, Trash2 } from 'lucide-react';
 import ExportButtons from '../components/ui/ExportButtons';
 import ShipmentFormModal from './shipments/ShipmentFormModal';
+import toast from 'react-hot-toast';
 
 export default function ShipmentsPage() {
   const { t } = useTranslation();
@@ -47,6 +48,21 @@ export default function ShipmentsPage() {
 
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
 
+  const handleDelete = async (id) => {
+    if (!window.confirm(t('common.confirm_delete'))) return;
+    try {
+      await api.delete(`/shipments/${id}`);
+      if (editId === id) {
+        setShowForm(false);
+        setEditId(null);
+      }
+      fetchShipments();
+      toast.success(t('common.deleted'));
+    } catch (err) {
+      toast.error(err.response?.data?.message || t('common.error'));
+    }
+  };
+
   const columns = [
     { key: 'tracking_number', label: t('shipments.tracking_number'), render: (row) => <button onClick={() => navigate(`/dashboard/shipments/${row.id}`)} className="font-mono text-sm font-medium text-primary-700 hover:text-primary-900 hover:underline">{row.tracking_number}</button> },
     { key: 'container_code', label: t('shipments.container_code'), render: (row) => row.container_code || '-' },
@@ -61,6 +77,11 @@ export default function ShipmentsPage() {
       key: 'actions', label: '', render: (row) => (
         <div className="flex gap-1">
           <button onClick={() => navigate(`/dashboard/shipments/${row.id}`)} className="p-1.5 text-gray-400 hover:text-primary-600"><Eye className="w-4 h-4" /></button>
+          {hasPermission('shipments.delete') && (
+            <button onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title={t('common.delete')}>
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
         </div>
       )
     }
