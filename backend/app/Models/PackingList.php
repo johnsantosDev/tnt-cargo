@@ -36,16 +36,23 @@ class PackingList extends Model
 
     public static function generateReference(): string
     {
+        $year = date('Y');
+        $month = date('m');
+
         do {
+            $count = static::withTrashed()
+                ->whereYear('created_at', $year)
+                ->whereMonth('created_at', $month)
+                ->count();
+
             $ref = 'PL-' . date('Ym') . '-' . str_pad(
-                static::whereYear('created_at', date('Y'))
-                    ->whereMonth('created_at', date('m'))
-                    ->count() + 1,
+                $count + 1,
                 4,
                 '0',
                 STR_PAD_LEFT
             );
-        } while (static::where('reference', $ref)->exists());
+        } while (static::withTrashed()->where('reference', $ref)->exists());
+
         return $ref;
     }
 

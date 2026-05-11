@@ -1007,7 +1007,7 @@ function FinalizeModal({ packingList, onClose, onFinalize, loading }) {
         </div>
 
         <Input
-          label={t('packing_list.price_per_cbm') + ' ($)'}
+          label={t('packing_list.price_per_cbm') + ' ($), optionel'}
           type="number" step="0.01" min="0"
           value={pricePerCbm}
           onChange={(e) => setPricePerCbm(e.target.value)}

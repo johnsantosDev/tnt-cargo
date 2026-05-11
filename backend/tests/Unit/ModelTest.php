@@ -148,6 +148,23 @@ class ModelTest extends TestCase
         $this->assertStringStartsWith('PL-', $reference);
     }
 
+    public function test_packing_list_generate_reference_includes_trashed_records(): void
+    {
+        $user = User::factory()->create();
+        $client = Client::factory()->create(['created_by' => $user->id]);
+
+        PackingList::factory()->create([
+            'client_id' => $client->id,
+            'created_by' => $user->id,
+            'reference' => 'PL-' . date('Ym') . '-0001',
+        ])->delete();
+
+        $reference = PackingList::generateReference();
+
+        $this->assertNotEquals('PL-' . date('Ym') . '-0001', $reference);
+        $this->assertStringStartsWith('PL-', $reference);
+    }
+
     public function test_packing_list_has_many_items(): void
     {
         $user = User::factory()->create();
