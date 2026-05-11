@@ -256,16 +256,35 @@ export default function PackingListsPage() {
 }
 
 // --- Create Packing List Modal ---
-function CreatePackingListModal({ onClose, onSaved }) {
+function CreatePackingListModal({ onClose, onSaved, initialClientId = '', initialShipmentId = null }) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [clients, setClients] = useState([]);
-  const [form, setForm] = useState({ client_id: '', price_per_cbm: '', cbm_count: '', additional_fees: '', fees_description: '', notes: '' });
+  const [photoFiles, setPhotoFiles] = useState([]);
+  const [form, setForm] = useState({
+    client_id: initialClientId || '',
+    shipment_id: initialShipmentId || '',
+    parcel_count: '1',
+    gross_weight_kg: '',
+    price_per_cbm: '',
+    cbm_count: '0',
+    additional_fees: '',
+    fees_description: '',
+    notes: '',
+  });
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
     api.get('/clients', { params: { per_page: 200 } }).then(({ data }) => setClients(data.data)).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    setForm((f) => ({
+      ...f,
+      client_id: initialClientId || f.client_id,
+      shipment_id: initialShipmentId != null ? String(initialShipmentId) : f.shipment_id,
+    }));
+  }, [initialClientId, initialShipmentId]);
 
   const pricePerCbm = parseFloat(form.price_per_cbm) || 0;
   const cbmCount = parseFloat(form.cbm_count) || 0;
@@ -278,14 +297,24 @@ function CreatePackingListModal({ onClose, onSaved }) {
     setLoading(true);
     setErrors({});
     try {
-      await api.post('/packing-lists', {
+      const payload = {
         client_id: form.client_id,
+        parcel_count: parseInt(form.parcel_count, 10) || 1,
+        gross_weight_kg: form.gross_weight_kg === '' ? null : parseFloat(form.gross_weight_kg),
         price_per_cbm: form.price_per_cbm || 0,
         cbm_count: form.cbm_count || 0,
         additional_fees: form.additional_fees || 0,
         fees_description: form.fees_description || null,
         notes: form.notes || null,
-      });
+      };
+      if (form.shipment_id) payload.shipment_id = form.shipment_id;
+      const { data } = await api.post('/packing-lists', payload);
+      const plId = data.packing_list?.id ?? data.packing_list?.data?.id;
+      if (plId && photoFiles.length > 0) {
+        const fd = new FormData();
+        photoFiles.forEach((f) => fd.append('photos[]', f));
+        await api.post(`/packing-lists/${plId}/photos`, fd);
+      }
       onSaved();
       toast.success(t('common.saved'));
     } catch (err) {
@@ -307,6 +336,15 @@ function CreatePackingListModal({ onClose, onSaved }) {
           error={errors.client_id?.[0]}
           placeholder={t('common.select')}
         />
+
+        {initialShipmentId && (
+          <input type="hidden" name="shipment_id" value={form.shipment_id} />
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <Input label={t('packing_list.parcel_count')} type="number" min="1" value={form.parcel_count} onChange={(e) => setForm({ ...form, parcel_count: e.target.value })} error={errors.parcel_count?.[0]} />
+          <Input label={t('packing_list.gross_weight_kg')} type="number" step="0.01" min="0" value={form.gross_weight_kg} onChange={(e) => setForm({ ...form, gross_weight_kg: e.target.value })} placeholder={t('packing_list.optional')} />
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <Input label={t('packing_list.price_per_cbm') + ' ($)'} type="number" step="0.01" min="0" value={form.price_per_cbm} onChange={(e) => setForm({ ...form, price_per_cbm: e.target.value })} error={errors.price_per_cbm?.[0]} />
@@ -347,6 +385,18 @@ function CreatePackingListModal({ onClose, onSaved }) {
           </div>
         )}
 
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('packing_list.add_photos')}</label>
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            className="block w-full text-sm text-gray-600"
+            onChange={(e) => setPhotoFiles(Array.from(e.target.files || []))}
+          />
+          {photoFiles.length > 0 && <p className="text-xs text-gray-500 mt-1">{photoFiles.length} fichier(s)</p>}
+        </div>
+
         <Textarea label={t('packing_list.notes')} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
@@ -358,8 +408,10 @@ function CreatePackingListModal({ onClose, onSaved }) {
 }
 
 // --- Packing List Detail Modal ---
-function PackingListDetailModal({ listId, onClose, onRefresh }) {
+function PackingListDetailModal({ listId, onClose, onRefresh, afterMutation }) {
   const { t } = useTranslation();
+  const { hasRole } = useAuth();
+  const isManager = hasRole('admin') || hasRole('manager');
   const [pl, setPl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showAddItem, setShowAddItem] = useState(false);
@@ -370,10 +422,15 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
   const [actionLoading, setActionLoading] = useState(false);
   const [whatsappModal, setWhatsappModal] = useState(null);
 
+  const runAfterMutation = () => {
+    onRefresh?.();
+    afterMutation?.();
+  };
+
   const fetchDetail = useCallback(() => {
     setLoading(true);
     api.get(`/packing-lists/${listId}`)
-      .then(({ data }) => setPl(data))
+      .then(({ data }) => setPl(data.data ?? data))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [listId]);
@@ -387,7 +444,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
     try {
       await api.delete(`/packing-lists/${listId}/items/${itemId}`);
       fetchDetail();
-      onRefresh();
+      runAfterMutation();
       toast.success(t('common.deleted'));
     } catch (err) { toast.error(err.response?.data?.message || t('common.error')); }
   };
@@ -397,7 +454,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
     try {
       await api.post(`/packing-lists/${listId}/finalize`, data);
       fetchDetail();
-      onRefresh();
+      runAfterMutation();
       setShowFinalize(false);
       toast.success(t('common.saved'));
     } catch (err) { toast.error(err.response?.data?.message || t('common.error')); }
@@ -421,7 +478,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
       const { data: res } = await api.post(`/packing-lists/${listId}/shipment`, data);
       toast.success(t('packing_list.shipment_created') + ': ' + res.shipment.tracking_number);
       fetchDetail();
-      onRefresh();
+      runAfterMutation();
       setShowCreateShipment(false);
     } catch (err) {
       toast.error(err.response?.data?.message || t('common.error'));
@@ -433,11 +490,41 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
     try {
       await api.put(`/packing-lists/${listId}`, data);
       fetchDetail();
-      onRefresh();
+      runAfterMutation();
       setShowEditDetails(false);
       toast.success(t('common.saved'));
     } catch (err) { toast.error(err.response?.data?.message || t('common.error')); }
     finally { setActionLoading(false); }
+  };
+
+  const handleUploadPhotos = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const fd = new FormData();
+    files.forEach((f) => fd.append('photos[]', f));
+    setActionLoading(true);
+    try {
+      await api.post(`/packing-lists/${listId}/photos`, fd);
+      e.target.value = '';
+      fetchDetail();
+      runAfterMutation();
+      toast.success(t('common.saved'));
+    } catch (err) {
+      toast.error(err.response?.data?.message || t('common.error'));
+    } finally { setActionLoading(false); }
+  };
+
+  const handleDeletePhoto = async (photoId) => {
+    if (!confirm(t('common.confirm_delete'))) return;
+    setActionLoading(true);
+    try {
+      await api.delete(`/packing-lists/${listId}/photos/${photoId}`);
+      fetchDetail();
+      runAfterMutation();
+      toast.success(t('common.deleted'));
+    } catch (err) {
+      toast.error(err.response?.data?.message || t('common.error'));
+    } finally { setActionLoading(false); }
   };
 
   const downloadItemReceipt = async (itemId) => {
@@ -470,6 +557,15 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
 
   const isDraft = pl.status === 'draft';
   const isFinalized = pl.status === 'finalized';
+  const canEditItems = isDraft || (isManager && !!pl.shipment_id);
+  const canEditHeader = isDraft || (isManager && !!pl.shipment_id);
+  const showCbmCol = Number(pl.total_cbm || 0) > 0 || (pl.items || []).some((i) => Number(i.cbm || 0) > 0);
+  const canFinalize =
+    isDraft &&
+    ((pl.items && pl.items.length > 0) ||
+      (pl.gross_weight_kg != null && Number(pl.gross_weight_kg) > 0) ||
+      (pl.photos && pl.photos.length > 0) ||
+      Number(pl.header_cbm || 0) > 0);
 
   return (
     <Modal isOpen onClose={onClose} title={`${t('packing_list.detail')} - ${pl.reference}`} size="xl">
@@ -482,8 +578,11 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
               {t(`packing_list.status_${pl.status}`)}
             </Badge>
           } />
-          <InfoCard label={t('packing_list.total_cbm')} value={`${Number(pl.total_cbm || 0).toFixed(4)} m³`} />
+          <InfoCard label={t('packing_list.parcel_count')} value={pl.parcel_count ?? '—'} />
           <InfoCard label={t('packing_list.total_weight')} value={`${Number(pl.total_weight || 0).toFixed(2)} kg`} />
+          {showCbmCol && (
+            <InfoCard label={t('packing_list.total_cbm')} value={`${Number(pl.total_cbm || 0).toFixed(4)} m³`} />
+          )}
         </div>
 
         {/* Financial summary */}
@@ -500,11 +599,39 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
           <InfoCard label={t('packing_list.grand_total')} value={formatMoney(Number(pl.total_amount || 0) + Number(pl.shipping_cost || 0) + Number(pl.additional_fees || 0))} className="text-green-700 font-bold text-lg" />
         </div>
 
-        {isDraft && (
+        {canEditHeader && (
           <div className="flex justify-end">
             <Button size="sm" variant="outline" onClick={() => setShowEditDetails(true)}>
               <Settings2 className="w-3.5 h-3.5 mr-1" />{t('packing_list.edit_details')}
             </Button>
+          </div>
+        )}
+
+        {(canEditHeader || (pl.photos && pl.photos.length > 0)) && (
+          <div className="border rounded-lg p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-gray-700">{t('packing_list.add_photos')}</h4>
+              {canEditHeader && (
+                <label className="text-sm text-primary-600 cursor-pointer">
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={handleUploadPhotos} disabled={actionLoading} />
+                  + {t('packing_list.upload')}
+                </label>
+              )}
+            </div>
+            {pl.photos && pl.photos.length > 0 ? (
+              <ul className="text-sm text-gray-600 divide-y">
+                {pl.photos.map((ph) => (
+                  <li key={ph.id} className="py-1 flex justify-between gap-2">
+                    <span className="truncate">{ph.original_name || `photo-${ph.id}`}</span>
+                    {canEditHeader && (
+                      <button type="button" className="text-red-500 shrink-0" onClick={() => handleDeletePhoto(ph.id)}>{t('common.delete')}</button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-gray-400">{t('packing_list.no_photos')}</p>
+            )}
           </div>
         )}
 
@@ -522,7 +649,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
               {t('packing_list.items')} ({pl.items?.length || 0})
             </h4>
             <div className="flex gap-2">
-              {isDraft && (
+              {canEditItems && (
                 <Button size="sm" onClick={() => setShowAddItem(true)}>
                   <Plus className="w-3.5 h-3.5 mr-1" />{t('packing_list.add_item')}
                 </Button>
@@ -537,7 +664,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
                   <tr>
                     <th className="px-3 py-2 text-left">{t('packing_list.description')}</th>
                     <th className="px-3 py-2 text-right">{t('packing_list.qty')}</th>
-                    <th className="px-3 py-2 text-right">{t('packing_list.cbm')}</th>
+                    {showCbmCol && <th className="px-3 py-2 text-right">{t('packing_list.cbm')}</th>}
                     <th className="px-3 py-2 text-right">{t('packing_list.weight')}</th>
                     <th className="px-3 py-2 text-right">{t('packing_list.total')}</th>
                     <th className="px-3 py-2 text-left">{t('packing_list.cbm_breakdown')}</th>
@@ -558,10 +685,12 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
                         {item.notes && <div className="text-xs text-gray-400">{item.notes}</div>}
                       </td>
                       <td className="px-3 py-2 text-right">{item.quantity}</td>
-                      <td className="px-3 py-2 text-right font-mono">
-                        {Number(item.cbm || 0).toFixed(4)}
-                        {item.quantity > 1 && <div className="text-xs text-gray-400">× {item.quantity} = {itemTotalCbm.toFixed(4)}</div>}
-                      </td>
+                      {showCbmCol && (
+                        <td className="px-3 py-2 text-right font-mono">
+                          {Number(item.cbm || 0).toFixed(4)}
+                          {item.quantity > 1 && <div className="text-xs text-gray-400">× {item.quantity} = {itemTotalCbm.toFixed(4)}</div>}
+                        </td>
+                      )}
                       <td className="px-3 py-2 text-right">{item.weight ? `${item.weight} kg` : '-'}</td>
                       <td className="px-3 py-2 text-right font-medium">{formatMoney(itemTotal)}</td>
                       <td className="px-3 py-2 text-left text-xs text-gray-500">
@@ -569,7 +698,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
                           <span>{itemTotalCbm.toFixed(2)} CBM × ${perCbm.toFixed(2)}/CBM = ${itemTotal.toFixed(2)}</span>
                         )}
                       </td>
-                      {isDraft && (
+                      {canEditItems && (
                         <td className="px-3 py-2 text-right">
                           <div className="flex gap-1 justify-end">
                             <button onClick={() => downloadItemReceipt(item.id)} className="p-1 text-gray-400 hover:text-green-600" title={t('packing_list.download_receipt')}><Download className="w-3.5 h-3.5" /></button>
@@ -587,7 +716,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
                           </div>
                         </td>
                       )}
-                      {!isDraft && (
+                      {!canEditItems && (
                         <td className="px-3 py-2 text-right">
                           <div className="flex gap-1 justify-end">
                             <button onClick={() => downloadItemReceipt(item.id)} className="p-1 text-gray-400 hover:text-green-600" title={t('packing_list.download_receipt')}><Download className="w-3.5 h-3.5" /></button>
@@ -609,7 +738,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
                 <tfoot className="bg-gray-50 font-semibold">
                   <tr>
                     <td className="px-3 py-2 text-right" colSpan={2}>{t('packing_list.totals')}</td>
-                    <td className="px-3 py-2 text-right font-mono">{Number(pl.total_cbm || 0).toFixed(4)} m³</td>
+                    {showCbmCol && <td className="px-3 py-2 text-right font-mono">{Number(pl.total_cbm || 0).toFixed(4)} m³</td>}
                     <td className="px-3 py-2 text-right">{Number(pl.total_weight || 0).toFixed(2)} kg</td>
                     <td className="px-3 py-2 text-right">{formatMoney(pl.total_amount)}</td>
                     <td></td>
@@ -643,7 +772,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
           >
             <MessageCircle className="w-4 h-4" />WhatsApp
           </button>
-          {isDraft && pl.items?.length > 0 && (
+          {canFinalize && (
             <Button variant="success" onClick={() => setShowFinalize(true)}>
               <CheckCircle className="w-4 h-4 mr-2" />{t('packing_list.finalize')}
             </Button>
@@ -671,7 +800,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
         <ItemFormModal
           packingListId={listId}
           onClose={() => setShowAddItem(false)}
-          onSaved={() => { setShowAddItem(false); fetchDetail(); onRefresh(); }}
+          onSaved={() => { setShowAddItem(false); fetchDetail(); runAfterMutation(); }}
         />
       )}
       {editItem && (
@@ -679,7 +808,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh }) {
           packingListId={listId}
           item={editItem}
           onClose={() => setEditItem(null)}
-          onSaved={() => { setEditItem(null); fetchDetail(); onRefresh(); }}
+          onSaved={() => { setEditItem(null); fetchDetail(); runAfterMutation(); }}
         />
       )}
       {showFinalize && (
@@ -919,6 +1048,9 @@ function FinalizeModal({ packingList, onClose, onFinalize, loading }) {
 // --- Edit Details Modal (price, notes) ---
 function EditDetailsModal({ packingList, onClose, onSave, loading }) {
   const { t } = useTranslation();
+  const [parcelCount, setParcelCount] = useState(String(packingList.parcel_count ?? 1));
+  const [grossWeight, setGrossWeight] = useState(packingList.gross_weight_kg ?? '');
+  const [headerCbm, setHeaderCbm] = useState(packingList.header_cbm ?? packingList.total_cbm ?? '');
   const [pricePerCbm, setPricePerCbm] = useState(packingList.price_per_cbm || '');
   const [additionalFees, setAdditionalFees] = useState(packingList.additional_fees || '');
   const [feesDescription, setFeesDescription] = useState(packingList.fees_description || '');
@@ -927,6 +1059,11 @@ function EditDetailsModal({ packingList, onClose, onSave, loading }) {
   return (
     <Modal isOpen onClose={onClose} title={t('packing_list.edit_details')} size="md">
       <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <Input label={t('packing_list.parcel_count')} type="number" min="1" value={parcelCount} onChange={(e) => setParcelCount(e.target.value)} />
+          <Input label={t('packing_list.gross_weight_kg')} type="number" step="0.01" min="0" value={grossWeight} onChange={(e) => setGrossWeight(e.target.value)} placeholder={t('packing_list.optional')} />
+        </div>
+        <Input label={t('packing_list.cbm_count') + ' (m³)'} type="number" step="0.0001" min="0" value={headerCbm} onChange={(e) => setHeaderCbm(e.target.value)} />
         <Input
           label={t('packing_list.price_per_cbm') + ' ($)'}
           type="number" step="0.01" min="0"
@@ -954,7 +1091,15 @@ function EditDetailsModal({ packingList, onClose, onSave, loading }) {
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
           <Button
-            onClick={() => onSave({ price_per_cbm: pricePerCbm || 0, additional_fees: additionalFees || 0, fees_description: feesDescription || null, notes: notes || null })}
+            onClick={() => onSave({
+              parcel_count: parseInt(parcelCount, 10) || 1,
+              gross_weight_kg: grossWeight === '' ? null : parseFloat(grossWeight),
+              header_cbm: headerCbm === '' ? 0 : parseFloat(headerCbm),
+              price_per_cbm: pricePerCbm || 0,
+              additional_fees: additionalFees || 0,
+              fees_description: feesDescription || null,
+              notes: notes || null,
+            })}
             disabled={loading}
           >
             {loading ? t('common.saving') : t('common.save')}
@@ -1222,3 +1367,5 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
     </Modal>
   );
 }
+
+export { CreatePackingListModal, PackingListDetailModal };

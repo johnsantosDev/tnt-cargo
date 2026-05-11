@@ -187,6 +187,26 @@
                     <td class="text-right">-{{ number_format($invoice->discount_amount, 2) }} {{ $invoice->currency }}</td>
                 </tr>
                 @endif
+                @if(($invoice->magerwa_price ?? 0) > 0)
+                <tr>
+                    <td>Magerwa</td>
+                    <td class="text-right">{{ number_format($invoice->magerwa_price, 2) }} {{ $invoice->currency }}</td>
+                </tr>
+                @endif
+                @foreach($invoice->auxiliary_fees ?? [] as $fee)
+                @if(($fee['amount'] ?? 0) > 0)
+                <tr>
+                    <td>{{ $fee['label'] ?? 'Frais' }}</td>
+                    <td class="text-right">{{ number_format($fee['amount'], 2) }} {{ $invoice->currency }}</td>
+                </tr>
+                @endif
+                @endforeach
+                @if(($invoice->cash_advance_amount ?? 0) > 0)
+                <tr>
+                    <td>Avance cash @if($invoice->cashAdvance) ({{ $invoice->cashAdvance->reference }}) @endif</td>
+                    <td class="text-right">-{{ number_format($invoice->cash_advance_amount, 2) }} {{ $invoice->currency }}</td>
+                </tr>
+                @endif
                 <tr class="total-row">
                     <td>TOTAL</td>
                     <td class="text-right">{{ number_format($invoice->total, 2) }} {{ $invoice->currency }}</td>

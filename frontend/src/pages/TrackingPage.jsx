@@ -44,6 +44,7 @@ export default function TrackingPage() {
   const shipment = data?.shipment;
   const timeline = data?.timeline || [];
   const allStatuses = data?.all_statuses || [];
+  const packingLists = shipment?.packing_lists || [];
 
   const getStatusIcon = (slug) => {
     const icons = {
@@ -285,6 +286,44 @@ export default function TrackingPage() {
                 </div>
               </div>
             </div>
+
+            {/* Packing Lists */}
+            {packingLists.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+                <h3 className="font-semibold text-gray-900 mb-6 flex items-center gap-2">
+                  <Package className="w-5 h-5 text-primary-600" />
+                  {t('tracking.contents')}
+                </h3>
+                <div className="space-y-4">
+                  {packingLists.map((pl, plIndex) => (
+                    <div key={plIndex} className="border border-gray-100 rounded-lg p-4">
+                      <h4 className="font-medium text-gray-900 mb-3">{t('tracking.packing_list')} {pl.reference}</h4>
+                      <div className="space-y-2">
+                        {pl.items.map((item, itemIndex) => (
+                          <div key={itemIndex} className="flex justify-between items-start py-2 border-b border-gray-50 last:border-b-0">
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-900">{item.description}</p>
+                              <div className="flex gap-4 text-sm text-gray-500 mt-1">
+                                <span>{t('tracking.quantity')}: {item.quantity}</span>
+                                {item.weight && <span>{t('tracking.weight')}: {item.weight}kg</span>}
+                                {item.cbm && <span>CBM: {item.cbm}</span>}
+                                {item.unit_price && <span>{t('tracking.unit_price')}: ${item.unit_price}</span>}
+                              </div>
+                              {item.notes && <p className="text-sm text-gray-500 mt-1 italic">{item.notes}</p>}
+                            </div>
+                            {item.total_price && (
+                              <div className="text-right">
+                                <p className="font-medium text-gray-900">${item.total_price}</p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

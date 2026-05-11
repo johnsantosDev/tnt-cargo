@@ -24,6 +24,7 @@ class Shipment extends Model
         'destination', 'description', 'weight', 'volume', 'quantity',
         'package_type', 'declared_value', 'declared_currency',
         'shipping_cost', 'customs_fee', 'warehouse_fee', 'other_fees',
+        'pl_cargo_subtotal', 'pl_freight_subtotal', 'calculation_lines',
         'total_cost', 'amount_paid', 'balance_due',
         'estimated_arrival', 'actual_arrival',
         'warehouse_entry_date', 'warehouse_exit_date',
@@ -44,6 +45,9 @@ class Shipment extends Model
             'customs_fee' => 'decimal:2',
             'warehouse_fee' => 'decimal:2',
             'other_fees' => 'decimal:2',
+            'pl_cargo_subtotal' => 'decimal:2',
+            'pl_freight_subtotal' => 'decimal:2',
+            'calculation_lines' => 'array',
             'total_cost' => 'decimal:2',
             'amount_paid' => 'decimal:2',
             'balance_due' => 'decimal:2',
@@ -100,6 +104,11 @@ class Shipment extends Model
         return $this->hasMany(Payment::class);
     }
 
+    public function packingLists()
+    {
+        return $this->hasMany(PackingList::class);
+    }
+
     public function invoice()
     {
         return $this->hasOne(Invoice::class);
@@ -117,9 +126,48 @@ class Shipment extends Model
 
     public function calculateTotalCost(): void
     {
-        $this->total_cost = $this->shipping_cost + $this->customs_fee
-            + $this->warehouse_fee + $this->other_fees;
-        $this->balance_due = $this->total_cost - $this->amount_paid;
+        $linesExtra = collect($this->calculation_lines ?? [])->sum(function ($line) {
+            return (float) ($line['amount'] ?? 0);
+        });
+
+        $packingPart = (float) ($this->pl_cargo_subtotal ?? 0) + (float) ($this->pl_freight_subtotal ?? 0);
+
+        if ($packingPart > 0.00001) {
+            $this->total_cost = $packingPart
+                + (float) $this->customs_fee
+                + (float) $this->warehouse_fee
+                + (float) $this->other_fees
+                + $linesExtra;
+        } else {
+            $this->total_cost = (float) $this->shipping_cost + (float) $this->customs_fee
+                + (float) $this->warehouse_fee + (float) $this->other_fees
+                + $linesExtra;
+        }
+
+        $this->balance_due = $this->total_cost - (float) $this->amount_paid;
+    }
+
+    public function syncTotalsFromPackingLists(): void
+    {
+        $lists = $this->packingLists()->get();
+
+        if ($lists->isEmpty()) {
+            $this->pl_cargo_subtotal = 0;
+            $this->pl_freight_subtotal = 0;
+        } else {
+            $this->pl_cargo_subtotal = $lists->sum(fn ($p) => (float) $p->total_amount);
+            $this->pl_freight_subtotal = $lists->sum(fn ($p) => (float) $p->shipping_cost + (float) ($p->additional_fees ?? 0));
+            $this->weight = $lists->sum(function ($p) {
+                return $p->gross_weight_kg !== null
+                    ? (float) $p->gross_weight_kg
+                    : (float) $p->total_weight;
+            });
+            $this->volume = $lists->sum(fn ($p) => (float) $p->total_cbm);
+            $this->quantity = $lists->sum(fn ($p) => (int) ($p->parcel_count ?? 1));
+            $this->shipping_cost = $this->pl_freight_subtotal;
+        }
+
+        $this->calculateTotalCost();
     }
 
     public function calculateWarehouseFee(): void

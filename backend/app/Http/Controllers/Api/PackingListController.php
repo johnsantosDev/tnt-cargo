@@ -7,6 +7,7 @@ use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PackingList;
 use App\Models\PackingListItem;
+use App\Models\PackingListPhoto;
 use App\Models\Shipment;
 use App\Models\ShipmentHistory;
 use App\Models\ShipmentStatus;
@@ -15,13 +16,30 @@ use App\Support\RegionContext;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class PackingListController extends Controller
 {
+    protected function syncShipment(?int $shipmentId): void
+    {
+        if ($shipmentId) {
+            Shipment::find($shipmentId)?->syncTotalsFromPackingLists();
+        }
+    }
+
+    protected function canEditPackingListItems(Request $request, PackingList $packingList): bool
+    {
+        if ($packingList->status === 'draft') {
+            return true;
+        }
+
+        return $request->user()->hasAnyRole(['admin', 'manager']) && $packingList->shipment_id !== null;
+    }
+
     public function index(Request $request): JsonResponse
     {
         $query = PackingList::with(['client', 'shipment', 'creator', 'items'])
-            ->withCount('items');
+            ->withCount(['items', 'photos']);
         RegionContext::apply($query, $request);
 
         if ($request->filled('client_id')) {
@@ -47,12 +65,16 @@ class PackingListController extends Controller
     {
         $validated = $request->validate([
             'client_id' => 'required|exists:clients,id',
+            'shipment_id' => 'nullable|exists:shipments,id',
+            'parcel_count' => 'nullable|integer|min:1',
+            'gross_weight_kg' => 'nullable|numeric|min:0',
             'price_per_cbm' => 'nullable|numeric|min:0',
             'additional_fees' => 'nullable|numeric|min:0',
             'fees_description' => 'nullable|string|max:500',
             'notes' => 'nullable|string',
             'cbm_count' => 'nullable|numeric|min:0',
-            'items' => 'sometimes|array|min:1',
+            'header_cbm' => 'nullable|numeric|min:0',
+            'items' => 'nullable|array',
             'items.*.description' => 'required|string|max:255',
             'items.*.quantity' => 'required|integer|min:1',
             'items.*.weight' => 'nullable|numeric|min:0',
@@ -66,19 +88,20 @@ class PackingListController extends Controller
         ]);
 
         $pricePerCbm = $validated['price_per_cbm'] ?? 0;
-        $cbmCount = $validated['cbm_count'] ?? 0;
-        $shippingCost = $pricePerCbm * $cbmCount;
+        $headerCbm = (float) ($validated['header_cbm'] ?? $validated['cbm_count'] ?? 0);
 
         $packingList = PackingList::create([
             'reference' => PackingList::generateReference(),
             'client_id' => $validated['client_id'],
+            'shipment_id' => $validated['shipment_id'] ?? null,
+            'parcel_count' => $validated['parcel_count'] ?? 1,
+            'gross_weight_kg' => $validated['gross_weight_kg'] ?? null,
+            'header_cbm' => $headerCbm,
             'price_per_cbm' => $pricePerCbm,
             'additional_fees' => $validated['additional_fees'] ?? 0,
             'fees_description' => $validated['fees_description'] ?? null,
-            'total_cbm' => $cbmCount,
-            'shipping_cost' => $shippingCost,
             'notes' => $validated['notes'] ?? null,
-            'status' => 'draft',
+            'status' => 'finalized',
             'created_by' => $request->user()->id,
             'region' => RegionContext::resolveWriteRegion($request),
         ]);
@@ -87,8 +110,10 @@ class PackingListController extends Controller
             foreach ($validated['items'] as $item) {
                 $packingList->items()->create($item);
             }
-            $packingList->recalculateTotals();
         }
+        $packingList->recalculateTotals();
+
+        $this->syncShipment($packingList->shipment_id);
 
         AuditService::log('created', $packingList, null, $packingList->toArray());
 
@@ -101,36 +126,44 @@ class PackingListController extends Controller
     public function show(PackingList $packingList): JsonResponse
     {
         return response()->json(
-            $packingList->load(['client', 'shipment', 'items', 'creator'])
+            $packingList->load(['client', 'shipment', 'items', 'creator', 'photos'])
         );
     }
 
     public function update(Request $request, PackingList $packingList): JsonResponse
     {
-        if ($packingList->status !== 'draft') {
+        $canEditHeader = $packingList->status === 'draft'
+            || ($request->user()->hasAnyRole(['admin', 'manager']) && $packingList->shipment_id);
+
+        if (!$canEditHeader) {
             return response()->json(['message' => 'Seules les listes brouillon peuvent être modifiées.'], 422);
         }
 
         $validated = $request->validate([
             'client_id' => 'sometimes|exists:clients,id',
+            'shipment_id' => 'nullable|exists:shipments,id',
+            'parcel_count' => 'sometimes|integer|min:1',
+            'gross_weight_kg' => 'nullable|numeric|min:0',
+            'header_cbm' => 'sometimes|numeric|min:0',
             'price_per_cbm' => 'sometimes|numeric|min:0',
             'additional_fees' => 'sometimes|numeric|min:0',
             'fees_description' => 'nullable|string|max:500',
             'notes' => 'nullable|string',
         ]);
 
+        $oldShipmentId = $packingList->shipment_id;
         $oldValues = $packingList->toArray();
         $packingList->update($validated);
+        $packingList->recalculateTotals();
 
-        if (isset($validated['price_per_cbm'])) {
-            $packingList->recalculateTotals();
-        }
+        $this->syncShipment($oldShipmentId);
+        $this->syncShipment($packingList->shipment_id);
 
         AuditService::log('updated', $packingList, $oldValues, $packingList->toArray());
 
         return response()->json([
             'message' => 'Packing list mise à jour.',
-            'packing_list' => $packingList->load(['client', 'items']),
+            'packing_list' => $packingList->load(['client', 'items', 'photos', 'shipment']),
         ]);
     }
 
@@ -140,8 +173,10 @@ class PackingListController extends Controller
             return response()->json(['message' => 'Non autorisé.'], 403);
         }
 
+        $shipmentId = $packingList->shipment_id;
         AuditService::log('deleted', $packingList, $packingList->toArray(), null);
         $packingList->delete();
+        $this->syncShipment($shipmentId);
 
         return response()->json(['message' => 'Packing list supprimée.']);
     }
@@ -150,8 +185,8 @@ class PackingListController extends Controller
 
     public function addItem(Request $request, PackingList $packingList): JsonResponse
     {
-        if ($packingList->status !== 'draft') {
-            return response()->json(['message' => 'Impossible d\'ajouter des articles à une liste finalisée.'], 422);
+        if (!$this->canEditPackingListItems($request, $packingList)) {
+            return response()->json(['message' => 'Impossible d\'ajouter des articles à cette liste.'], 422);
         }
 
         $validated = $request->validate([
@@ -169,11 +204,12 @@ class PackingListController extends Controller
 
         $item = $packingList->items()->create($validated);
         $packingList->recalculateTotals();
+        $this->syncShipment($packingList->shipment_id);
 
         return response()->json([
             'message' => 'Article ajouté.',
             'item' => $item,
-            'packing_list' => $packingList->fresh()->load(['client', 'items']),
+            'packing_list' => $packingList->fresh()->load(['client', 'items', 'photos']),
         ], 201);
     }
 
@@ -182,8 +218,8 @@ class PackingListController extends Controller
         if ($item->packing_list_id !== $packingList->id) {
             return response()->json(['message' => 'Article non trouvé dans cette packing list.'], 404);
         }
-        if ($packingList->status !== 'draft') {
-            return response()->json(['message' => 'Impossible de modifier des articles d\'une liste finalisée.'], 422);
+        if (!$this->canEditPackingListItems($request, $packingList)) {
+            return response()->json(['message' => 'Impossible de modifier des articles de cette liste.'], 422);
         }
 
         $validated = $request->validate([
@@ -201,29 +237,31 @@ class PackingListController extends Controller
 
         $item->update($validated);
         $packingList->recalculateTotals();
+        $this->syncShipment($packingList->shipment_id);
 
         return response()->json([
             'message' => 'Article mis à jour.',
             'item' => $item->fresh(),
-            'packing_list' => $packingList->fresh()->load(['client', 'items']),
+            'packing_list' => $packingList->fresh()->load(['client', 'items', 'photos']),
         ]);
     }
 
-    public function removeItem(PackingList $packingList, PackingListItem $item): JsonResponse
+    public function removeItem(Request $request, PackingList $packingList, PackingListItem $item): JsonResponse
     {
         if ($item->packing_list_id !== $packingList->id) {
             return response()->json(['message' => 'Article non trouvé dans cette packing list.'], 404);
         }
-        if ($packingList->status !== 'draft') {
-            return response()->json(['message' => 'Impossible de supprimer des articles d\'une liste finalisée.'], 422);
+        if (!$this->canEditPackingListItems($request, $packingList)) {
+            return response()->json(['message' => 'Impossible de supprimer des articles de cette liste.'], 422);
         }
 
         $item->delete();
         $packingList->recalculateTotals();
+        $this->syncShipment($packingList->shipment_id);
 
         return response()->json([
             'message' => 'Article supprimé.',
-            'packing_list' => $packingList->fresh()->load(['client', 'items']),
+            'packing_list' => $packingList->fresh()->load(['client', 'items', 'photos']),
         ]);
     }
 
@@ -235,8 +273,12 @@ class PackingListController extends Controller
             return response()->json(['message' => 'Cette packing list est déjà finalisée.'], 422);
         }
 
-        if ($packingList->items()->count() === 0) {
-            return response()->json(['message' => 'La packing list doit contenir au moins un article.'], 422);
+        $hasItems = $packingList->items()->count() > 0;
+        $hasWeight = $packingList->gross_weight_kg !== null && (float) $packingList->gross_weight_kg > 0;
+        $hasPhotos = $packingList->photos()->count() > 0;
+        $hasDeclaredCbm = (float) ($packingList->header_cbm ?? 0) > 0;
+        if (!$hasItems && !$hasWeight && !$hasPhotos && !$hasDeclaredCbm) {
+            return response()->json(['message' => 'Ajoutez des articles, un poids déclaré, des CBM ou des photos avant de finaliser.'], 422);
         }
 
         $validated = $request->validate([
@@ -255,11 +297,13 @@ class PackingListController extends Controller
             'shipment_id' => $validated['shipment_id'] ?? $packingList->shipment_id,
         ]);
 
+        $this->syncShipment($packingList->shipment_id);
+
         AuditService::log('updated', $packingList, ['status' => 'draft'], ['status' => 'finalized']);
 
         return response()->json([
             'message' => 'Packing list finalisée.',
-            'packing_list' => $packingList->load(['client', 'shipment', 'items']),
+            'packing_list' => $packingList->load(['client', 'shipment', 'items', 'photos']),
         ]);
     }
 
@@ -271,19 +315,21 @@ class PackingListController extends Controller
 
         $packingList->load('items');
 
-        $subtotal = $packingList->items->sum('total_price');
         $shippingCost = $packingList->shipping_cost;
         $additionalFees = $packingList->additional_fees ?? 0;
-        $total = $subtotal + $shippingCost + $additionalFees;
 
         $invoice = Invoice::create([
             'invoice_number' => Invoice::generateInvoiceNumber(),
             'client_id' => $packingList->client_id,
             'shipment_id' => $packingList->shipment_id,
-            'subtotal' => $total,
+            'subtotal' => 0,
             'tax_amount' => 0,
             'discount_amount' => 0,
-            'total' => $total,
+            'magerwa_price' => 0,
+            'auxiliary_fees' => null,
+            'cash_advance_id' => null,
+            'cash_advance_amount' => 0,
+            'total' => 0,
             'currency' => 'USD',
             'status' => 'draft',
             'issue_date' => now(),
@@ -295,9 +341,10 @@ class PackingListController extends Controller
 
         // Add each packing item as an invoice line
         foreach ($packingList->items as $item) {
+            $cbmPart = (float) ($item->cbm ?? 0) > 0 ? ' (CBM: '.$item->cbm.')' : '';
             InvoiceItem::create([
                 'invoice_id' => $invoice->id,
-                'description' => "{$item->description} (CBM: {$item->cbm})",
+                'description' => $item->description.$cbmPart,
                 'quantity' => $item->quantity,
                 'unit_price' => $item->unit_price,
                 'total' => $item->total_price,
@@ -306,9 +353,12 @@ class PackingListController extends Controller
 
         // Add shipping cost as a separate line
         if ($shippingCost > 0) {
+            $cbmLabel = (float) $packingList->total_cbm > 0
+                ? "Frais d'expédition ({$packingList->total_cbm} CBM × {$packingList->price_per_cbm}/CBM)"
+                : "Frais d'expédition";
             InvoiceItem::create([
                 'invoice_id' => $invoice->id,
-                'description' => "Frais d'expédition ({$packingList->total_cbm} CBM × {$packingList->price_per_cbm}/CBM)",
+                'description' => $cbmLabel,
                 'quantity' => 1,
                 'unit_price' => $shippingCost,
                 'total' => $shippingCost,
@@ -329,9 +379,12 @@ class PackingListController extends Controller
             ]);
         }
 
+        $invoice->recalculateTotal();
+        $invoice->save();
+
         return response()->json([
             'message' => 'Facture générée depuis la packing list.',
-            'invoice' => $invoice->load(['client', 'items']),
+            'invoice' => $invoice->load(['client', 'items', 'cashAdvance']),
         ], 201);
     }
 
@@ -393,6 +446,8 @@ class PackingListController extends Controller
         $packingList->update(['shipment_id' => $shipment->id]);
 
         $shipment->client->increment('shipment_count');
+
+        $shipment->syncTotalsFromPackingLists();
 
         AuditService::log('created', $shipment, null, $shipment->toArray());
 
@@ -565,6 +620,8 @@ class PackingListController extends Controller
 
         $shipment->client->increment('shipment_count');
 
+        $shipment->syncTotalsFromPackingLists();
+
         AuditService::log('created', $shipment, null, $shipment->toArray());
 
         return response()->json([
@@ -575,11 +632,68 @@ class PackingListController extends Controller
 
     public function getByShipment($shipmentId): JsonResponse
     {
-        $packingLists = PackingList::with(['items', 'client'])
+        $packingLists = PackingList::with(['items', 'client', 'photos'])
             ->where('shipment_id', $shipmentId)
             ->get();
 
         return response()->json($packingLists);
+    }
+
+    public function uploadPhotos(Request $request, PackingList $packingList): JsonResponse
+    {
+        if ($packingList->status === 'shipped' && !$request->user()->hasAnyRole(['admin', 'manager'])) {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
+        $request->validate([
+            'photos' => 'required|array|min:1|max:20',
+            'photos.*' => 'required|image|max:5120',
+        ]);
+
+        $maxSort = (int) $packingList->photos()->max('sort_order');
+        $created = [];
+        foreach ($request->file('photos') as $i => $file) {
+            $path = $file->store('packing-list-photos/'.$packingList->id, 'local');
+            $created[] = $packingList->photos()->create([
+                'file_path' => $path,
+                'original_name' => $file->getClientOriginalName(),
+                'sort_order' => $maxSort + $i + 1,
+            ]);
+        }
+
+        return response()->json([
+            'message' => count($created).' photo(s) ajoutée(s).',
+            'photos' => $created,
+        ], 201);
+    }
+
+    public function deletePhoto(Request $request, PackingList $packingList, PackingListPhoto $photo): JsonResponse
+    {
+        if ($photo->packing_list_id !== $packingList->id) {
+            return response()->json(['message' => 'Photo introuvable.'], 404);
+        }
+        if ($packingList->status === 'shipped' && !$request->user()->hasAnyRole(['admin', 'manager'])) {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
+        Storage::disk('local')->delete($photo->file_path);
+        $photo->delete();
+
+        return response()->json(['message' => 'Photo supprimée.']);
+    }
+
+    public function downloadPhoto(PackingList $packingList, PackingListPhoto $photo)
+    {
+        if ($photo->packing_list_id !== $packingList->id) {
+            return response()->json(['message' => 'Photo introuvable.'], 404);
+        }
+
+        $path = Storage::disk('local')->path($photo->file_path);
+        if (!is_readable($path)) {
+            return response()->json(['message' => 'Fichier introuvable.'], 404);
+        }
+
+        return response()->file($path);
     }
 
     public function downloadItemReceipt(PackingList $packingList, PackingListItem $item)
@@ -601,6 +715,8 @@ class PackingListController extends Controller
     public function downloadReceipt(PackingList $packingList)
     {
         $packingList->load(['client', 'items', 'shipment']);
+
+        $packingList->load('photos');
 
         $pdf = Pdf::loadView('packing-lists.receipt', [
             'packingList' => $packingList,

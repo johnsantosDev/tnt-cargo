@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\CashAdvance;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Shipment;
@@ -52,6 +53,12 @@ class InvoiceController extends Controller
             'shipment_id' => 'nullable|exists:shipments,id',
             'tax_amount' => 'nullable|numeric|min:0',
             'discount_amount' => 'nullable|numeric|min:0',
+            'magerwa_price' => 'nullable|numeric|min:0',
+            'auxiliary_fees' => 'nullable|array',
+            'auxiliary_fees.*.label' => 'required|string|max:255',
+            'auxiliary_fees.*.amount' => 'required|numeric|min:0',
+            'cash_advance_id' => 'nullable|exists:cash_advances,id',
+            'cash_advance_amount' => 'nullable|numeric|min:0',
             'currency' => 'nullable|string|size:3',
             'due_date' => 'required|date',
             'notes' => 'nullable|string',
@@ -61,23 +68,31 @@ class InvoiceController extends Controller
             'items.*.unit_price' => 'required|numeric|min:0',
         ]);
 
-        $subtotal = 0;
-        foreach ($validated['items'] as $item) {
-            $subtotal += $item['quantity'] * $item['unit_price'];
-        }
-
         $tax = $validated['tax_amount'] ?? 0;
         $discount = $validated['discount_amount'] ?? 0;
-        $total = $subtotal + $tax - $discount;
+        $magerwa = $validated['magerwa_price'] ?? 0;
+        $auxiliaryFees = $validated['auxiliary_fees'] ?? null;
+
+        $cashAdvanceAmount = $validated['cash_advance_amount'] ?? 0;
+        if (!empty($validated['cash_advance_id'])) {
+            $ca = CashAdvance::find($validated['cash_advance_id']);
+            if ($ca && (float) $cashAdvanceAmount <= 0) {
+                $cashAdvanceAmount = (float) ($ca->balance > 0 ? $ca->balance : $ca->amount);
+            }
+        }
 
         $invoice = Invoice::create([
             'invoice_number' => Invoice::generateInvoiceNumber(),
             'client_id' => $validated['client_id'],
             'shipment_id' => $validated['shipment_id'] ?? null,
-            'subtotal' => $subtotal,
+            'subtotal' => 0,
             'tax_amount' => $tax,
             'discount_amount' => $discount,
-            'total' => $total,
+            'magerwa_price' => $magerwa,
+            'auxiliary_fees' => $auxiliaryFees,
+            'cash_advance_id' => $validated['cash_advance_id'] ?? null,
+            'cash_advance_amount' => $cashAdvanceAmount,
+            'total' => 0,
             'currency' => $validated['currency'] ?? 'USD',
             'status' => 'draft',
             'issue_date' => now(),
@@ -97,18 +112,21 @@ class InvoiceController extends Controller
             ]);
         }
 
+        $invoice->recalculateTotal();
+        $invoice->save();
+
         AuditService::log('created', $invoice, null, $invoice->toArray());
 
         return response()->json([
             'message' => 'Facture créée avec succès.',
-            'invoice' => $invoice->load(['client', 'items']),
+            'invoice' => $invoice->load(['client', 'items', 'cashAdvance']),
         ], 201);
     }
 
     public function show(Invoice $invoice): JsonResponse
     {
         return response()->json(
-            $invoice->load(['client', 'shipment', 'items', 'creator'])
+            $invoice->load(['client', 'shipment', 'items', 'creator', 'cashAdvance'])
         );
     }
 
@@ -118,6 +136,12 @@ class InvoiceController extends Controller
             'status' => 'sometimes|in:draft,sent,paid,partial,overdue,cancelled',
             'tax_amount' => 'sometimes|numeric|min:0',
             'discount_amount' => 'sometimes|numeric|min:0',
+            'magerwa_price' => 'sometimes|numeric|min:0',
+            'auxiliary_fees' => 'nullable|array',
+            'auxiliary_fees.*.label' => 'required_with:auxiliary_fees|string|max:255',
+            'auxiliary_fees.*.amount' => 'required_with:auxiliary_fees|numeric|min:0',
+            'cash_advance_id' => 'nullable|exists:cash_advances,id',
+            'cash_advance_amount' => 'sometimes|numeric|min:0',
             'due_date' => 'sometimes|date',
             'notes' => 'nullable|string',
             'amount_paid' => 'sometimes|numeric|min:0',
@@ -125,6 +149,13 @@ class InvoiceController extends Controller
 
         $oldValues = $invoice->toArray();
         $invoice->update($validated);
+
+        if (array_key_exists('magerwa_price', $validated) || array_key_exists('auxiliary_fees', $validated)
+            || array_key_exists('cash_advance_amount', $validated) || array_key_exists('cash_advance_id', $validated)
+            || array_key_exists('tax_amount', $validated) || array_key_exists('discount_amount', $validated)) {
+            $invoice->recalculateTotal();
+            $invoice->save();
+        }
 
         if (isset($validated['amount_paid'])) {
             if ($invoice->amount_paid >= $invoice->total) {
@@ -138,16 +169,39 @@ class InvoiceController extends Controller
 
         return response()->json([
             'message' => 'Facture mise à jour.',
-            'invoice' => $invoice->load(['client', 'items']),
+            'invoice' => $invoice->load(['client', 'items', 'cashAdvance']),
         ]);
     }
 
     public function generateFromShipment(Request $request, Shipment $shipment): JsonResponse
     {
+        $validated = $request->validate([
+            'magerwa_price' => 'nullable|numeric|min:0',
+            'auxiliary_fees' => 'nullable|array',
+            'auxiliary_fees.*.label' => 'required_with:auxiliary_fees|string|max:255',
+            'auxiliary_fees.*.amount' => 'required_with:auxiliary_fees|numeric|min:0',
+            'cash_advance_id' => 'nullable|exists:cash_advances,id',
+            'cash_advance_amount' => 'nullable|numeric|min:0',
+        ]);
+
         $items = [];
-        if ($shipment->shipping_cost > 0) {
-            $items[] = ['description' => 'Frais d\'expédition', 'quantity' => 1, 'unit_price' => $shipment->shipping_cost];
+
+        $plCargo = (float) ($shipment->pl_cargo_subtotal ?? 0);
+        $plFreight = (float) ($shipment->pl_freight_subtotal ?? 0);
+
+        if ($plCargo > 0) {
+            $items[] = ['description' => 'Marchandise (packing lists)', 'quantity' => 1, 'unit_price' => $plCargo];
         }
+        if ($plFreight > 0) {
+            $items[] = ['description' => 'Fret & frais packing lists', 'quantity' => 1, 'unit_price' => $plFreight];
+        }
+
+        if ($plCargo <= 0 && $plFreight <= 0) {
+            if ($shipment->shipping_cost > 0) {
+                $items[] = ['description' => 'Frais d\'expédition', 'quantity' => 1, 'unit_price' => $shipment->shipping_cost];
+            }
+        }
+
         if ($shipment->customs_fee > 0) {
             $items[] = ['description' => 'Frais de douane', 'quantity' => 1, 'unit_price' => $shipment->customs_fee];
         }
@@ -161,19 +215,43 @@ class InvoiceController extends Controller
             $items[] = ['description' => 'Assurance', 'quantity' => 1, 'unit_price' => $shipment->insurance_amount];
         }
 
-        $subtotal = array_sum(array_column($items, 'unit_price'));
+        foreach ($shipment->calculation_lines ?? [] as $line) {
+            $amt = (float) ($line['amount'] ?? 0);
+            if ($amt != 0.0 && !empty($line['description'])) {
+                $items[] = ['description' => $line['description'], 'quantity' => 1, 'unit_price' => $amt];
+            }
+        }
+
+        if (count($items) === 0) {
+            return response()->json(['message' => 'Aucune ligne facturable sur cette expédition.'], 422);
+        }
+
+        $magerwa = (float) ($validated['magerwa_price'] ?? 0);
+        $auxiliaryFees = $validated['auxiliary_fees'] ?? null;
+
+        $cashAdvanceAmount = (float) ($validated['cash_advance_amount'] ?? 0);
+        if (!empty($validated['cash_advance_id'])) {
+            $ca = CashAdvance::find($validated['cash_advance_id']);
+            if ($ca && $cashAdvanceAmount <= 0) {
+                $cashAdvanceAmount = (float) ($ca->balance > 0 ? $ca->balance : $ca->amount);
+            }
+        }
 
         $invoice = Invoice::create([
             'invoice_number' => Invoice::generateInvoiceNumber(),
             'client_id' => $shipment->client_id,
             'shipment_id' => $shipment->id,
-            'subtotal' => $subtotal,
+            'subtotal' => 0,
             'tax_amount' => 0,
             'discount_amount' => 0,
-            'total' => $subtotal,
+            'magerwa_price' => $magerwa,
+            'auxiliary_fees' => $auxiliaryFees,
+            'cash_advance_id' => $validated['cash_advance_id'] ?? null,
+            'cash_advance_amount' => $cashAdvanceAmount,
+            'total' => 0,
             'amount_paid' => $shipment->amount_paid,
-            'currency' => $shipment->declared_currency,
-            'status' => $shipment->amount_paid >= $subtotal ? 'paid' : ($shipment->amount_paid > 0 ? 'partial' : 'draft'),
+            'currency' => $shipment->declared_currency ?? 'USD',
+            'status' => 'draft',
             'issue_date' => now(),
             'due_date' => now()->addDays(30),
             'created_by' => $request->user()->id,
@@ -190,15 +268,24 @@ class InvoiceController extends Controller
             ]);
         }
 
+        $invoice->recalculateTotal();
+        $invoice->save();
+
+        if ($invoice->total > 0 && $invoice->amount_paid >= $invoice->total) {
+            $invoice->update(['status' => 'paid', 'paid_date' => now()]);
+        } elseif ($invoice->amount_paid > 0) {
+            $invoice->update(['status' => 'partial']);
+        }
+
         return response()->json([
             'message' => 'Facture générée depuis l\'expédition.',
-            'invoice' => $invoice->load(['client', 'items']),
+            'invoice' => $invoice->load(['client', 'items', 'cashAdvance']),
         ], 201);
     }
 
     public function downloadPdf(Invoice $invoice)
     {
-        $invoice->load(['client', 'items', 'shipment']);
+        $invoice->load(['client', 'items', 'shipment', 'cashAdvance']);
         $pdf = Pdf::loadView('invoices.pdf', compact('invoice'));
         $clientName = str_replace(' ', '_', $invoice->client->name ?? 'client');
         $timestamp = now()->format('dmYHis');

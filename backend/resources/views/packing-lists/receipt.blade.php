@@ -38,6 +38,10 @@
     </style>
 </head>
 <body>
+@php
+    $showCbm = (float)($packingList->total_cbm ?? 0) > 0
+        || $packingList->items->contains(fn ($i) => (float)($i->cbm ?? 0) > 0);
+@endphp
 <div class="container">
     {{-- Header --}}
     <div class="header">
@@ -81,6 +85,14 @@
                 <td class="info-value">{{ strtoupper($packingList->status) }}</td>
             </tr>
             @endif
+            @if(($packingList->parcel_count ?? 0) > 0)
+            <tr>
+                <td class="info-label">Nombre de colis</td>
+                <td class="info-value">{{ $packingList->parcel_count }}</td>
+                <td class="info-label">Poids déclaré</td>
+                <td class="info-value">{{ $packingList->gross_weight_kg !== null ? number_format($packingList->gross_weight_kg, 2).' kg' : '—' }}</td>
+            </tr>
+            @endif
         </table>
     </div>
 
@@ -92,7 +104,9 @@
                 <th style="width:30%;">Description</th>
                 <th class="text-right">Qté</th>
                 <th class="text-right">Poids (kg)</th>
+                @if($showCbm)
                 <th class="text-right">CBM</th>
+                @endif
                 <th class="text-right">Prix unit.</th>
                 <th class="text-right">Total</th>
             </tr>
@@ -112,7 +126,9 @@
                 </td>
                 <td class="text-right">{{ $item->quantity }}</td>
                 <td class="text-right">{{ $item->weight ? number_format($item->weight, 2) : '-' }}</td>
+                @if($showCbm)
                 <td class="text-right">{{ number_format($item->cbm ?? 0, 4) }}</td>
+                @endif
                 <td class="text-right">${{ number_format($item->unit_price, 2) }}</td>
                 <td class="text-right">${{ number_format($item->total_price, 2) }}</td>
             </tr>
@@ -141,22 +157,28 @@
                 <td>Total articles</td>
                 <td class="text-right">${{ number_format($packingList->total_amount ?? 0, 2) }}</td>
             </tr>
+            @if($showCbm)
             <tr>
                 <td>Total CBM</td>
                 <td class="text-right">{{ number_format($packingList->total_cbm ?? 0, 4) }} m³</td>
             </tr>
+            @endif
             <tr>
                 <td>Poids total</td>
                 <td class="text-right">{{ number_format($packingList->total_weight ?? 0, 2) }} kg</td>
             </tr>
+            @if($showCbm)
             <tr>
                 <td>Prix par CBM</td>
                 <td class="text-right">${{ number_format($packingList->price_per_cbm ?? 0, 2) }}</td>
             </tr>
+            @endif
+            @if((float)($packingList->shipping_cost ?? 0) > 0)
             <tr>
                 <td>Frais d'expédition</td>
                 <td class="text-right">${{ number_format($packingList->shipping_cost ?? 0, 2) }}</td>
             </tr>
+            @endif
             @if($packingList->additional_fees > 0)
             <tr>
                 <td>Frais supplémentaires
@@ -175,6 +197,17 @@
     </div>
 
     <div style="clear:both;"></div>
+
+    @if($packingList->photos && $packingList->photos->count() > 0)
+    <div style="margin-top: 24px;">
+        <div class="label" style="font-weight:bold; margin-bottom:8px;">Photos ({{ $packingList->photos->count() }})</div>
+        <div style="font-size:10px; color:#666;">
+            @foreach($packingList->photos as $photo)
+                <div>• {{ $photo->original_name ?? basename($photo->file_path) }}</div>
+            @endforeach
+        </div>
+    </div>
+    @endif
 
     {{-- Footer --}}
     <div class="footer">

@@ -87,6 +87,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/shipments/{shipment}/packing-lists', [PackingListController::class, 'getByShipment']);
     Route::get('/packing-lists/{packingList}/items/{item}/receipt', [PackingListController::class, 'downloadItemReceipt']);
     Route::get('/packing-lists/{packingList}/receipt', [PackingListController::class, 'downloadReceipt']);
+    Route::post('/packing-lists/{packingList}/photos', [PackingListController::class, 'uploadPhotos']);
+    Route::delete('/packing-lists/{packingList}/photos/{photo}', [PackingListController::class, 'deletePhoto']);
+    Route::get('/packing-lists/{packingList}/photos/{photo}/download', [PackingListController::class, 'downloadPhoto']);
 
     // Transfers (Procurement)
     Route::apiResource('transfers', TransferController::class)->only(['index', 'store', 'show', 'destroy']);

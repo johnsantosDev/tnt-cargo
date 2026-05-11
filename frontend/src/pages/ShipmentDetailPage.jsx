@@ -4,7 +4,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardHeader, CardBody, Button, Badge, StatusBadge, Spinner, Modal, Select, Textarea, Input } from '../components/ui';
-import { ArrowLeft, Upload, FileText, Trash2, CheckCircle, Clock, Download, MapPin, Share2, Copy, MessageCircle, Mail, Link2, Image as ImageIcon, Eye, X, Box, DollarSign } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, Trash2, CheckCircle, Clock, Download, MapPin, Share2, Copy, MessageCircle, Mail, Link2, Image as ImageIcon, Eye, X, Box, DollarSign, Plus, Edit3 } from 'lucide-react';
+import { CreatePackingListModal, PackingListDetailModal } from './PackingListsPage';
 import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
 import { sendViaWhatsApp } from '../utils/export';
 import toast from 'react-hot-toast';
@@ -26,6 +27,10 @@ export default function ShipmentDetailPage() {
   const [docUrls, setDocUrls] = useState({});
   const [previewDoc, setPreviewDoc] = useState(null);
   const [packingLists, setPackingLists] = useState([]);
+  const [packingListModalId, setPackingListModalId] = useState(null);
+  const [showCreatePackingList, setShowCreatePackingList] = useState(false);
+  const [calcLines, setCalcLines] = useState([{ description: '', amount: '' }]);
+  const [savingCalc, setSavingCalc] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completionNote, setCompletionNote] = useState('');
@@ -58,16 +63,45 @@ export default function ShipmentDetailPage() {
     return () => { Object.values(docUrls).forEach(url => URL.revokeObjectURL(url)); };
   }, []);
 
+  const loadPackingLists = useCallback(() => {
+    api.get(`/shipments/${id}/packing-lists`).then(({ data }) => setPackingLists(Array.isArray(data) ? data : (data.data || []))).catch(console.error);
+  }, [id]);
+
   useEffect(() => {
     fetch();
     api.get('/shipment-statuses').then(({ data }) => setStatuses(data.data || data)).catch(console.error);
-    api.get(`/shipments/${id}/packing-lists`).then(({ data }) => setPackingLists(data)).catch(console.error);
-  }, [id]);
+    loadPackingLists();
+  }, [id, loadPackingLists]);
+
+  useEffect(() => {
+    if (!shipment?.id) return;
+    const raw = shipment.calculation_lines;
+    const lines = Array.isArray(raw) && raw.length
+      ? raw.map((l) => ({ description: l.description || '', amount: l.amount != null ? String(l.amount) : '' }))
+      : [{ description: '', amount: '' }];
+    setCalcLines(lines);
+  }, [shipment?.id, JSON.stringify(shipment?.calculation_lines ?? null)]);
 
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('fr-FR') : '-';
 
   const openWhatsAppModal = (payload) => setWhatsappModal(payload);
+
+  const saveCalculationLines = async () => {
+    setSavingCalc(true);
+    try {
+      const calculation_lines = calcLines
+        .filter((l) => l.description?.trim() && l.amount !== '' && !Number.isNaN(parseFloat(l.amount)))
+        .map((l) => ({ description: l.description.trim(), amount: parseFloat(l.amount) }));
+      await api.put(`/shipments/${id}`, { calculation_lines });
+      fetch();
+      toast.success(t('common.saved'));
+    } catch (err) {
+      toast.error(err.response?.data?.message || t('common.error'));
+    } finally {
+      setSavingCalc(false);
+    }
+  };
 
   const handleStatusUpdate = async (e) => {
     e.preventDefault();
@@ -269,6 +303,8 @@ export default function ShipmentDetailPage() {
             {infoRow(t('shipments.customs_fee'), formatMoney(shipment.customs_fee))}
             {infoRow(t('shipments.warehouse_fee'), formatMoney(shipment.warehouse_fee))}
             {infoRow(t('shipments.other_fees'), formatMoney(shipment.other_fees))}
+            {Number(shipment.pl_cargo_subtotal || 0) > 0 && infoRow(t('shipments.pl_cargo_subtotal'), formatMoney(shipment.pl_cargo_subtotal))}
+            {Number(shipment.pl_freight_subtotal || 0) > 0 && infoRow(t('shipments.pl_freight_subtotal'), formatMoney(shipment.pl_freight_subtotal))}
             {shipment.insurance_amount > 0 && infoRow(t('shipments.insurance_amount'), formatMoney(shipment.insurance_amount))}
             <div className="flex justify-between py-2 mt-2 border-t-2 border-gray-200">
               <span className="text-sm font-bold text-gray-700">{t('shipments.total_cost')}</span>
@@ -355,71 +391,153 @@ export default function ShipmentDetailPage() {
       </Card>
 
       {/* Packing Lists */}
-      {packingLists.length > 0 && (
-        <Card>
-          <CardHeader>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2">
               <Box className="w-5 h-5 text-primary-600" />
-              <h3 className="font-semibold">{t('packing_list.title')}</h3>
+              <h3 className="font-semibold">{t('shipments.packing_lists_for_shipment')}</h3>
             </div>
-          </CardHeader>
-          <CardBody>
-            {packingLists.map((pl) => (
-              <div key={pl.id} className="mb-6 last:mb-0">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-sm font-medium text-primary-700">{pl.reference}</span>
-                    <Badge color={pl.status === 'draft' ? 'yellow' : pl.status === 'finalized' ? 'blue' : 'green'}>
-                      {t(`packing_list.status_${pl.status}`)}
-                    </Badge>
+            {hasPermission('shipments.edit') && (
+              <Button size="sm" onClick={() => setShowCreatePackingList(true)}>
+                <Plus className="w-4 h-4 mr-1" />{t('shipments.add_packing_list')}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardBody>
+          {packingLists.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-6">{t('shipments.no_packing_lists')}</p>
+          ) : (
+            packingLists.map((pl) => {
+              const showCbm = Number(pl.total_cbm || 0) > 0 || (pl.items || []).some((i) => Number(i.cbm || 0) > 0);
+              return (
+                <div key={pl.id} className="mb-6 last:mb-0">
+                  <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-sm font-medium text-primary-700">{pl.reference}</span>
+                      <Badge color={pl.status === 'draft' ? 'yellow' : pl.status === 'finalized' ? 'blue' : 'green'}>
+                        {t(`packing_list.status_${pl.status}`)}
+                      </Badge>
+                      <span className="text-xs text-gray-500">{t('packing_list.parcel_count')}: {pl.parcel_count ?? '—'}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-sm text-gray-500">
+                        {showCbm && (
+                          <>
+                            {t('packing_list.total_cbm')}: <span className="font-mono font-medium">{Number(pl.total_cbm || 0).toFixed(4)} m³</span>
+                            <span className="mx-2">|</span>
+                          </>
+                        )}
+                        {t('packing_list.shipping_cost')}: <span className="font-medium text-blue-600">{formatMoney(pl.shipping_cost)}</span>
+                      </div>
+                      {hasPermission('shipments.edit') && (
+                        <Button size="sm" variant="outline" onClick={() => setPackingListModalId(pl.id)}>
+                          <Edit3 className="w-3.5 h-3.5 mr-1" />{t('shipments.open_packing_list')}
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-sm text-gray-500">
-                    {t('packing_list.total_cbm')}: <span className="font-mono font-medium">{Number(pl.total_cbm || 0).toFixed(4)} m³</span>
-                    <span className="mx-2">|</span>
-                    {t('packing_list.shipping_cost')}: <span className="font-medium text-blue-600">{formatMoney(pl.shipping_cost)}</span>
-                  </div>
-                </div>
-                {pl.items && pl.items.length > 0 && (
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-3 py-2 text-left">{t('packing_list.description')}</th>
-                          <th className="px-3 py-2 text-right">{t('packing_list.qty')}</th>
-                          <th className="px-3 py-2 text-right">{t('packing_list.cbm')}</th>
-                          <th className="px-3 py-2 text-right">{t('packing_list.weight')}</th>
-                          <th className="px-3 py-2 text-right">{t('packing_list.unit_price')}</th>
-                          <th className="px-3 py-2 text-right">{t('packing_list.total')}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {pl.items.map((item) => (
-                          <tr key={item.id}>
-                            <td className="px-3 py-2">{item.description}</td>
-                            <td className="px-3 py-2 text-right">{item.quantity}</td>
-                            <td className="px-3 py-2 text-right font-mono">{Number(item.cbm || 0).toFixed(4)}</td>
-                            <td className="px-3 py-2 text-right">{item.weight ? `${item.weight} kg` : '-'}</td>
-                            <td className="px-3 py-2 text-right">{formatMoney(item.unit_price)}</td>
-                            <td className="px-3 py-2 text-right font-medium">{formatMoney(item.total_price)}</td>
+                  {pl.items && pl.items.length > 0 && (
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left">{t('packing_list.description')}</th>
+                            <th className="px-3 py-2 text-right">{t('packing_list.qty')}</th>
+                            {showCbm && <th className="px-3 py-2 text-right">{t('packing_list.cbm')}</th>}
+                            <th className="px-3 py-2 text-right">{t('packing_list.weight')}</th>
+                            <th className="px-3 py-2 text-right">{t('packing_list.unit_price')}</th>
+                            <th className="px-3 py-2 text-right">{t('packing_list.total')}</th>
                           </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="bg-gray-50 font-semibold">
-                        <tr>
-                          <td colSpan="2" className="px-3 py-2 text-right">{t('packing_list.totals')}</td>
-                          <td className="px-3 py-2 text-right font-mono">{Number(pl.total_cbm || 0).toFixed(4)}</td>
-                          <td className="px-3 py-2 text-right">{Number(pl.total_weight || 0).toFixed(2)} kg</td>
-                          <td className="px-3 py-2 text-right"></td>
-                          <td className="px-3 py-2 text-right">{formatMoney(pl.total_amount)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                )}
+                        </thead>
+                        <tbody className="divide-y">
+                          {pl.items.map((item) => (
+                            <tr key={item.id}>
+                              <td className="px-3 py-2">{item.description}</td>
+                              <td className="px-3 py-2 text-right">{item.quantity}</td>
+                              {showCbm && <td className="px-3 py-2 text-right font-mono">{Number(item.cbm || 0).toFixed(4)}</td>}
+                              <td className="px-3 py-2 text-right">{item.weight ? `${item.weight} kg` : '-'}</td>
+                              <td className="px-3 py-2 text-right">{formatMoney(item.unit_price)}</td>
+                              <td className="px-3 py-2 text-right font-medium">{formatMoney(item.total_price)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-gray-50 font-semibold">
+                          <tr>
+                            <td colSpan="2" className="px-3 py-2 text-right">{t('packing_list.totals')}</td>
+                            {showCbm && <td className="px-3 py-2 text-right font-mono">{Number(pl.total_cbm || 0).toFixed(4)}</td>}
+                            <td className="px-3 py-2 text-right">{Number(pl.total_weight || 0).toFixed(2)} kg</td>
+                            <td className="px-3 py-2 text-right"></td>
+                            <td className="px-3 py-2 text-right">{formatMoney(pl.total_amount)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </CardBody>
+      </Card>
+
+      {hasPermission('shipments.edit') && (
+        <Card>
+          <CardHeader><h3 className="font-semibold">{t('shipments.calculation_extra')}</h3></CardHeader>
+          <CardBody className="space-y-3">
+            {calcLines.map((line, idx) => (
+              <div key={idx} className="flex flex-wrap gap-2 items-end">
+                <div className="flex-1 min-w-[180px]">
+                  <label className="block text-xs text-gray-500 mb-1">{t('shipments.calc_line_desc')}</label>
+                  <input
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                    value={line.description}
+                    onChange={(e) => setCalcLines((prev) => prev.map((l, i) => (i === idx ? { ...l, description: e.target.value } : l)))}
+                  />
+                </div>
+                <div className="w-32">
+                  <label className="block text-xs text-gray-500 mb-1">{t('shipments.calc_line_amount')}</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                    value={line.amount}
+                    onChange={(e) => setCalcLines((prev) => prev.map((l, i) => (i === idx ? { ...l, amount: e.target.value } : l)))}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="text-sm text-red-500 px-2 py-2"
+                  onClick={() => setCalcLines((prev) => prev.filter((_, i) => i !== idx))}
+                >×</button>
               </div>
             ))}
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="secondary" onClick={() => setCalcLines((prev) => [...prev, { description: '', amount: '' }])}>
+                <Plus className="w-4 h-4 mr-1" />{t('shipments.add_line')}
+              </Button>
+              <Button type="button" size="sm" onClick={saveCalculationLines} disabled={savingCalc}>{t('shipments.save_calculation')}</Button>
+            </div>
           </CardBody>
         </Card>
+      )}
+
+      {packingListModalId && (
+        <PackingListDetailModal
+          listId={packingListModalId}
+          onClose={() => { setPackingListModalId(null); loadPackingLists(); fetch(); }}
+          onRefresh={loadPackingLists}
+          afterMutation={() => { loadPackingLists(); fetch(); }}
+        />
+      )}
+      {showCreatePackingList && shipment?.client_id && (
+        <CreatePackingListModal
+          initialClientId={String(shipment.client_id)}
+          initialShipmentId={Number(id)}
+          onClose={() => setShowCreatePackingList(false)}
+          onSaved={() => { setShowCreatePackingList(false); loadPackingLists(); fetch(); }}
+        />
       )}
 
       {/* Documents */}

@@ -56,7 +56,7 @@ class PackingListTest extends TestCase
 
         $this->assertDatabaseHas('packing_lists', [
             'client_id' => $this->client->id,
-            'status' => 'draft',
+            'status' => 'finalized',
         ]);
     }
 

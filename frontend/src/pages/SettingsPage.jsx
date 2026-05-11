@@ -11,7 +11,7 @@ export default function SettingsPage() {
   const { hasPermission, hasRole } = useAuth();
   const [activeTab, setActiveTab] = useState('general');
 
-  const canManageUsers = hasRole('admin') || hasRole('manager');
+  const canManageUsers = hasRole('admin');
   const isAdmin = hasRole('admin');
   const canManageRoles = isAdmin;
 

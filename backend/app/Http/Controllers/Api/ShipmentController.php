@@ -154,6 +154,9 @@ class ShipmentController extends Controller
             'receiver_phone' => 'nullable|string|max:20',
             'delivery_address' => 'nullable|string',
             'assigned_to' => 'nullable|exists:users,id',
+            'calculation_lines' => 'nullable|array',
+            'calculation_lines.*.description' => 'required_with:calculation_lines|string|max:255',
+            'calculation_lines.*.amount' => 'required_with:calculation_lines|numeric',
         ]);
 
         $oldValues = $shipment->toArray();
@@ -326,7 +329,7 @@ class ShipmentController extends Controller
     public function track(string $trackingNumber): JsonResponse
     {
         $shipment = Shipment::where('tracking_number', $trackingNumber)
-            ->with(['status', 'history.status', 'client:id,name'])
+            ->with(['status', 'history.status', 'client:id,name', 'packingLists.items'])
             ->firstOrFail();
 
         $allStatuses = ShipmentStatus::where('is_active', true)->orderBy('order')->get();
@@ -342,6 +345,18 @@ class ShipmentController extends Controller
                 'estimated_arrival' => $shipment->estimated_arrival,
                 'actual_arrival' => $shipment->actual_arrival,
                 'created_at' => $shipment->created_at,
+                'packing_lists' => $shipment->packingLists->map(fn($pl) => [
+                    'reference' => $pl->reference,
+                    'items' => $pl->items->map(fn($item) => [
+                        'description' => $item->description,
+                        'quantity' => $item->quantity,
+                        'weight' => $item->weight,
+                        'cbm' => $item->cbm,
+                        'unit_price' => $item->unit_price,
+                        'total_price' => $item->total_price,
+                        'notes' => $item->notes,
+                    ]),
+                ]),
             ],
             'timeline' => $shipment->history->map(fn($h) => [
                 'status' => $h->status->name,
@@ -357,7 +372,7 @@ class ShipmentController extends Controller
     public function trackByShareToken(string $shareToken): JsonResponse
     {
         $shipment = Shipment::where('share_token', $shareToken)
-            ->with(['status', 'history.status', 'client:id,name'])
+            ->with(['status', 'history.status', 'client:id,name', 'packingLists.items'])
             ->firstOrFail();
 
         $allStatuses = ShipmentStatus::where('is_active', true)->orderBy('order')->get();
@@ -373,6 +388,18 @@ class ShipmentController extends Controller
                 'estimated_arrival' => $shipment->estimated_arrival,
                 'actual_arrival' => $shipment->actual_arrival,
                 'created_at' => $shipment->created_at,
+                'packing_lists' => $shipment->packingLists->map(fn($pl) => [
+                    'reference' => $pl->reference,
+                    'items' => $pl->items->map(fn($item) => [
+                        'description' => $item->description,
+                        'quantity' => $item->quantity,
+                        'weight' => $item->weight,
+                        'cbm' => $item->cbm,
+                        'unit_price' => $item->unit_price,
+                        'total_price' => $item->total_price,
+                        'notes' => $item->notes,
+                    ]),
+                ]),
             ],
             'timeline' => $shipment->history->map(fn($h) => [
                 'status' => $h->status->name,

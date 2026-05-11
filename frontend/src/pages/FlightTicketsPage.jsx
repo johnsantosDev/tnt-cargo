@@ -483,6 +483,7 @@ function TicketFormModal({ ticket, onClose, onSaved }) {
   const [customAirline, setCustomAirline] = useState('');
   const [paymentProofFile, setPaymentProofFile] = useState(null);
   const [ticketFile, setTicketFile] = useState(null);
+  const [showFlightInfo, setShowFlightInfo] = useState(false);
   const [form, setForm] = useState({
     client_id: ticket?.client_id || '',
     client_name: ticket?.client_name || '',
@@ -590,22 +591,37 @@ function TicketFormModal({ ticket, onClose, onSaved }) {
           </div>
         </fieldset>
 
+        {/* Flight Info Toggle */}
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="showFlightInfo"
+            checked={showFlightInfo}
+            onChange={(e) => setShowFlightInfo(e.target.checked)}
+            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          />
+          <label htmlFor="showFlightInfo" className="text-sm font-medium text-gray-700">
+            Remplir les informations de vol
+          </label>
+        </div>
+
         {/* Flight Details */}
-        <fieldset className="border border-gray-200 rounded-lg p-4">
-          <legend className="text-sm font-semibold text-gray-600 px-2">{t('flight_tickets.flight_info')}</legend>
+        {showFlightInfo && (
+          <fieldset className="border border-gray-200 rounded-lg p-4">
+            <legend className="text-sm font-semibold text-gray-600 px-2">{t('flight_tickets.flight_info')}</legend>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <Select label={t('flight_tickets.airline')} value={form.airline} onChange={(e) => { setField('airline', e.target.value); if (e.target.value !== '__other__') setCustomAirline(''); }} error={errors.airline?.[0]} required>
+              <Select label={t('flight_tickets.airline')} value={form.airline} onChange={(e) => { setField('airline', e.target.value); if (e.target.value !== '__other__') setCustomAirline(''); }} error={errors.airline?.[0]}>
                 <option value="">{t('common.select')}</option>
                 {AIRLINES.map(a => <option key={a} value={a}>{a}</option>)}
                 <option value="__other__">{t('flight_tickets.other_airline')}</option>
               </Select>
               {form.airline === '__other__' && (
-                <Input className="mt-2" placeholder={t('flight_tickets.custom_airline_placeholder')} value={customAirline} onChange={(e) => setCustomAirline(e.target.value)} required />
+                <Input className="mt-2" placeholder={t('flight_tickets.custom_airline_placeholder')} value={customAirline} onChange={(e) => setCustomAirline(e.target.value)} />
               )}
             </div>
             <Input label={t('flight_tickets.flight_no')} value={form.flight_number} onChange={(e) => setField('flight_number', e.target.value)} placeholder="Ex: ET 807" />
-            <Select label={t('flight_tickets.trip_type')} value={form.trip_type} onChange={(e) => setField('trip_type', e.target.value)} required>
+            <Select label={t('flight_tickets.trip_type')} value={form.trip_type} onChange={(e) => setField('trip_type', e.target.value)}>
               <option value="one_way">{t('flight_tickets.one_way')}</option>
               <option value="round_trip">{t('flight_tickets.round_trip')}</option>
             </Select>
@@ -621,9 +637,8 @@ function TicketFormModal({ ticket, onClose, onSaved }) {
                 value={form.departure_airport}
                 onChange={(a) => { setField('departure_airport', a.code); setField('departure_city', a.city); setField('departure_country', a.country); }}
                 error={errors.departure_airport?.[0]}
-                required
               />
-              <Input label={t('flight_tickets.date_time')} type="datetime-local" value={form.departure_date} onChange={(e) => setField('departure_date', e.target.value)} error={errors.departure_date?.[0]} required />
+              <Input label={t('flight_tickets.date_time')} type="datetime-local" value={form.departure_date} onChange={(e) => setField('departure_date', e.target.value)} error={errors.departure_date?.[0]} />
             </div>
             <div className="space-y-3">
               <h4 className="text-sm font-medium text-gray-600 flex items-center gap-1">
@@ -634,7 +649,6 @@ function TicketFormModal({ ticket, onClose, onSaved }) {
                 value={form.arrival_airport}
                 onChange={(a) => { setField('arrival_airport', a.code); setField('arrival_city', a.city); setField('arrival_country', a.country); }}
                 error={errors.arrival_airport?.[0]}
-                required
               />
               <Input label={t('flight_tickets.date_time')} type="datetime-local" value={form.arrival_date} onChange={(e) => setField('arrival_date', e.target.value)} />
             </div>
@@ -647,7 +661,7 @@ function TicketFormModal({ ticket, onClose, onSaved }) {
           )}
 
           <div className="mt-4">
-            <Select label={t('flight_tickets.class')} value={form.travel_class} onChange={(e) => setField('travel_class', e.target.value)} required>
+            <Select label={t('flight_tickets.class')} value={form.travel_class} onChange={(e) => setField('travel_class', e.target.value)}>
               <option value="economy">{t('flight_tickets.economy')}</option>
               <option value="premium_economy">{t('flight_tickets.premium_economy')}</option>
               <option value="business">{t('flight_tickets.business')}</option>
@@ -655,12 +669,13 @@ function TicketFormModal({ ticket, onClose, onSaved }) {
             </Select>
           </div>
         </fieldset>
+        )}
 
         {/* Pricing & Payment */}
         <fieldset className="border border-gray-200 rounded-lg p-4">
           <legend className="text-sm font-semibold text-gray-600 px-2">{t('flight_tickets.pricing')}</legend>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input label={t('flight_tickets.ticket_price')} type="number" step="0.01" min="0" value={form.ticket_price} onChange={(e) => setField('ticket_price', e.target.value)} error={errors.ticket_price?.[0]} required />
+            <Input label={t('flight_tickets.ticket_price')} type="number" step="0.01" min="0" value={form.ticket_price} onChange={(e) => setField('ticket_price', e.target.value)} error={errors.ticket_price?.[0]} />
             <Input label={t('flight_tickets.service_fee')} type="number" step="0.01" min="0" value={form.service_fee} onChange={(e) => setField('service_fee', e.target.value)} />
             <Input label={t('flight_tickets.taxes')} type="number" step="0.01" min="0" value={form.taxes} onChange={(e) => setField('taxes', e.target.value)} />
           </div>

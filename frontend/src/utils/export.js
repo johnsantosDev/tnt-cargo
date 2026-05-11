@@ -30,32 +30,14 @@ export async function sendViaWhatsApp(blob, fileName, phone) {
     return;
   }
 
-  // Desktop / Web: download the file first, then open WhatsApp Desktop if
-  // available, otherwise fallback to WhatsApp Web.
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  a.click();
-  URL.revokeObjectURL(url);
-
+  // Desktop / Web: open WhatsApp Web with the phone number
+  // The user will need to manually attach the downloaded file
   if (cleanPhone) {
     const text = encodeURIComponent(
       `Bonjour, veuillez trouver ci-joint le document : ${fileName}`
     );
-    const whatsappDesktopUrl = `whatsapp://send?phone=${cleanPhone}&text=${text}`;
     const whatsappWebUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${text}`;
-
-    const fallback = setTimeout(() => {
-      window.open(whatsappWebUrl, '_blank');
-    }, 1200);
-
-    const handleVisibility = () => {
-      if (document.hidden) clearTimeout(fallback);
-    };
-
-    document.addEventListener('visibilitychange', handleVisibility, { once: true });
-    window.location.href = whatsappDesktopUrl;
+    window.open(whatsappWebUrl, '_blank');
   }
 }
 

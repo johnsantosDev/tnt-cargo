@@ -185,10 +185,27 @@ function InvoiceFormModal({ onClose, onSaved }) {
   const [errors, setErrors] = useState({});
   const [shipments, setShipments] = useState([]);
   const [selectedShipment, setSelectedShipment] = useState('');
+  const [magerwa, setMagerwa] = useState('');
+  const [auxFees, setAuxFees] = useState([{ label: '', amount: '' }]);
+  const [cashAdvanceId, setCashAdvanceId] = useState('');
+  const [cashAdvanceAmount, setCashAdvanceAmount] = useState('');
+  const [advances, setAdvances] = useState([]);
+
+  const shipmentObj = shipments.find((s) => String(s.id) === String(selectedShipment));
 
   useEffect(() => {
     api.get('/shipments', { params: { per_page: 100 } }).then(({ data }) => setShipments(data.data)).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    if (!shipmentObj?.client_id) {
+      setAdvances([]);
+      return;
+    }
+    api.get('/cash-advances', { params: { client_id: shipmentObj.client_id, per_page: 100 } })
+      .then(({ data }) => setAdvances(data.data || []))
+      .catch(console.error);
+  }, [shipmentObj?.client_id]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -196,7 +213,16 @@ function InvoiceFormModal({ onClose, onSaved }) {
     setLoading(true);
     setErrors({});
     try {
-      await api.post(`/invoices/from-shipment/${selectedShipment}`);
+      const auxiliary_fees = auxFees
+        .filter((f) => f.label?.trim() && f.amount !== '' && !Number.isNaN(parseFloat(f.amount)))
+        .map((f) => ({ label: f.label.trim(), amount: parseFloat(f.amount) }));
+      const payload = {
+        magerwa_price: magerwa === '' ? 0 : parseFloat(magerwa),
+        auxiliary_fees: auxiliary_fees.length ? auxiliary_fees : null,
+        cash_advance_id: cashAdvanceId || null,
+        cash_advance_amount: cashAdvanceAmount === '' ? undefined : parseFloat(cashAdvanceAmount),
+      };
+      await api.post(`/invoices/from-shipment/${selectedShipment}`, payload);
       onSaved();
       toast.success(t('common.saved'));
     } catch (err) {
@@ -212,6 +238,25 @@ function InvoiceFormModal({ onClose, onSaved }) {
           <option value="">{t('common.select')}</option>
           {shipments.map((s) => <option key={s.id} value={s.id}>{s.tracking_number} - {s.client?.name}</option>)}
         </Select>
+        <Input label={t('invoices.magerwa') + ' ($)'} type="number" step="0.01" min="0" value={magerwa} onChange={(e) => setMagerwa(e.target.value)} />
+        <div className="space-y-2">
+          <div className="text-sm font-medium text-gray-700">{t('invoices.auxiliary_fee')}</div>
+          {auxFees.map((row, idx) => (
+            <div key={idx} className="flex gap-2">
+              <Input className="flex-1" placeholder={t('invoices.description')} value={row.label} onChange={(e) => setAuxFees((p) => p.map((r, i) => (i === idx ? { ...r, label: e.target.value } : r)))} />
+              <Input type="number" step="0.01" className="w-28" placeholder="$" value={row.amount} onChange={(e) => setAuxFees((p) => p.map((r, i) => (i === idx ? { ...r, amount: e.target.value } : r)))} />
+              <button type="button" className="text-red-500 px-2" onClick={() => setAuxFees((p) => p.filter((_, i) => i !== idx))}>×</button>
+            </div>
+          ))}
+          <Button type="button" size="sm" variant="secondary" onClick={() => setAuxFees((p) => [...p, { label: '', amount: '' }])}>{t('invoices.add_auxiliary_fee')}</Button>
+        </div>
+        <Select label={t('invoices.select_cash_advance')} value={cashAdvanceId} onChange={(e) => { setCashAdvanceId(e.target.value); setCashAdvanceAmount(''); }}>
+          <option value="">{t('invoices.no_cash_advance')}</option>
+          {advances.map((a) => (
+            <option key={a.id} value={a.id}>{a.reference} — {t('invoices.balance')}: ${Number(a.balance || 0).toFixed(2)}</option>
+          ))}
+        </Select>
+        <Input label={t('invoices.cash_advance') + ' ($)'} type="number" step="0.01" min="0" value={cashAdvanceAmount} onChange={(e) => setCashAdvanceAmount(e.target.value)} placeholder={t('invoices.optional_amount')} />
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
           <Button type="submit" loading={loading}><FileText className="w-4 h-4 mr-2" />{t('invoices.generate')}</Button>
@@ -221,10 +266,15 @@ function InvoiceFormModal({ onClose, onSaved }) {
   );
 }
 
-function InvoiceDetailModal({ invoice, onClose, onDownload, onWhatsApp }) {
+function InvoiceDetailModal({ invoice: invoiceProp, onClose, onDownload, onWhatsApp }) {
   const { t } = useTranslation();
+  const [invoice, setInvoice] = useState(invoiceProp);
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('fr-FR') : '-';
+
+  useEffect(() => {
+    api.get(`/invoices/${invoiceProp.id}`).then(({ data }) => setInvoice(data.data ?? data)).catch(console.error);
+  }, [invoiceProp.id]);
 
   return (
     <Modal isOpen onClose={onClose} title={`Facture ${invoice.invoice_number}`} size="lg">
@@ -235,6 +285,24 @@ function InvoiceDetailModal({ invoice, onClose, onDownload, onWhatsApp }) {
           <div><span className="text-gray-500">Échéance:</span> <span className="font-medium">{formatDate(invoice.due_date)}</span></div>
           <div><span className="text-gray-500">Statut:</span> <span className="font-medium">{invoice.status}</span></div>
         </div>
+
+        {Number(invoice.magerwa_price || 0) > 0 && (
+          <div className="text-sm text-gray-700">{t('invoices.magerwa')}: <span className="font-medium">{formatMoney(invoice.magerwa_price)}</span></div>
+        )}
+        {(invoice.auxiliary_fees || []).length > 0 && (
+          <div className="text-sm space-y-1">
+            <div className="text-gray-500">{t('invoices.auxiliary_fee')}</div>
+            {invoice.auxiliary_fees.map((f, i) => (
+              <div key={i}>{f.label}: {formatMoney(f.amount)}</div>
+            ))}
+          </div>
+        )}
+        {Number(invoice.cash_advance_amount || 0) > 0 && (
+          <div className="text-sm text-orange-700">
+            {t('invoices.cash_advance')}: -{formatMoney(invoice.cash_advance_amount)}
+            {invoice.cash_advance?.reference && <span className="text-gray-500"> ({invoice.cash_advance.reference})</span>}
+          </div>
+        )}
 
         {invoice.items && invoice.items.length > 0 && (
           <div className="border rounded-lg overflow-hidden">
@@ -258,6 +326,10 @@ function InvoiceDetailModal({ invoice, onClose, onDownload, onWhatsApp }) {
                 ))}
               </tbody>
               <tfoot className="bg-gray-50 font-bold">
+                <tr>
+                  <td colSpan="3" className="px-4 py-2 text-right">{t('invoices.subtotal')}</td>
+                  <td className="px-4 py-2 text-right">{formatMoney(invoice.subtotal)}</td>
+                </tr>
                 <tr>
                   <td colSpan="3" className="px-4 py-2 text-right">Total</td>
                   <td className="px-4 py-2 text-right">{formatMoney(invoice.total)}</td>
