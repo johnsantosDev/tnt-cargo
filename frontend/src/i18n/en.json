@@ -622,7 +622,10 @@
     "upload": "Upload",
     "no_photos": "No photos",
     "link_shipment_id": "Shipment ID (link)",
-    "link_shipment_optional_id": "Optional — paste ID to link directly"
+    "link_shipment_optional_id": "Optional — paste ID to link directly",
+    "auxiliary_fees": "Auxiliary Fees",
+    "no_auxiliary_fees": "No auxiliary fees",
+    "fee_description": "Fee description"
   },
   "flight_tickets": {
     "title": "Flight Tickets",

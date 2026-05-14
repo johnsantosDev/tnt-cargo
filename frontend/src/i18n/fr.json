@@ -627,7 +627,10 @@
     "upload": "Téléverser",
     "no_photos": "Aucune photo",
     "link_shipment_id": "ID expédition (optionel)",
-    "link_shipment_optional_id": "Optionnel — coller l’ID si liaison directe"
+    "link_shipment_optional_id": "Optionnel — coller l'ID si liaison directe",
+    "auxiliary_fees": "Frais auxiliaires",
+    "no_auxiliary_fees": "Aucun frais auxiliaire",
+    "fee_description": "Description du frais"
   },
   "flight_tickets": {
     "title": "Billets d'avion",

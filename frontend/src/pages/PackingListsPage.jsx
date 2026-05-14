@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -1122,90 +1122,227 @@ function CreateShipmentModal({ packingList, onClose, onSubmit, loading }) {
     estimated_arrival: '',
     special_instructions: '',
   });
+  const [itemUpdates, setItemUpdates] = useState({});
+  const [auxiliaryFees, setAuxiliaryFees] = useState([]);
   const set = (f) => (e) => setForm(prev => ({ ...prev, [f]: e.target.value }));
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
 
-  const arrivalPresets = [
-    { label: '1 sem', weeks: 1 },
-    { label: '2 sem', weeks: 2 },
-    { label: '3 sem', weeks: 3 },
-    { label: '1 mois', weeks: 0, months: 1 },
-    { label: '1m 1s', weeks: 1, months: 1 },
-    { label: '1m 2s', weeks: 2, months: 1 },
-    { label: '1m 3s', weeks: 3, months: 1 },
-    { label: '2 mois', weeks: 0, months: 2 },
-  ];
+  // Flatten items from packing list
+  const allItems = useMemo(() => {
+    return (packingList.items || []).map(item => ({
+      ...item,
+      packingListRef: packingList.reference,
+      packingListId: packingList.id,
+    }));
+  }, [packingList]);
+
+  // Calculate totals with updates
+  const totals = useMemo(() => {
+    let totalCbm = 0;
+    let totalWeight = 0;
+    let totalAmount = 0;
+    let totalShipping = 0;
+    let totalFees = Number(packingList.additional_fees || 0);
+
+    allItems.forEach(item => {
+      const updates = itemUpdates[item.id] || {};
+      const cbm = updates.cbm !== undefined ? Number(updates.cbm) : Number(item.cbm || 0);
+      const price = updates.price !== undefined ? Number(updates.price) : Number(item.price || 0);
+      const quantity = Number(item.quantity || 1);
+
+      totalCbm += cbm * quantity;
+      totalAmount += price * quantity;
+      totalWeight += Number(item.weight || 0) * quantity;
+    });
+
+    // Calculate shipping cost based on updated CBM and packing list price_per_cbm
+    const plPricePerCbm = Number(packingList.price_per_cbm || 0);
+    totalShipping = totalCbm * plPricePerCbm;
+
+    const auxiliaryTotal = auxiliaryFees.reduce((sum, fee) => sum + Number(fee.amount || 0), 0);
+    const grandTotal = totalAmount + totalShipping + totalFees + auxiliaryTotal;
+
+    return { totalCbm, totalWeight, totalAmount, totalShipping, totalFees, auxiliaryTotal, grandTotal };
+  }, [packingList, allItems, itemUpdates, auxiliaryFees]);
+
+  const updateItem = (itemId, field, value) => {
+    // Basic validation
+    if (field === 'cbm' || field === 'price') {
+      const numValue = parseFloat(value);
+      if (isNaN(numValue) || numValue < 0) {
+        return; // Don't update with invalid values
+      }
+      value = numValue;
+    }
+
+    setItemUpdates(prev => ({
+      ...prev,
+      [itemId]: {
+        ...prev[itemId],
+        [field]: value,
+      },
+    }));
+  };
+
+  const addAuxiliaryFee = () => {
+    setAuxiliaryFees(prev => [...prev, { description: '', amount: 0 }]);
+  };
+
+  const updateAuxiliaryFee = (index, field, value) => {
+    if (field === 'amount') {
+      const numValue = parseFloat(value);
+      if (isNaN(numValue) || numValue < 0) {
+        return; // Don't update with invalid values
+      }
+      value = numValue;
+    }
+
+    setAuxiliaryFees(prev => prev.map((fee, i) => 
+      i === index ? { ...fee, [field]: value } : fee
+    ));
+  };
+
+  const removeAuxiliaryFee = (index) => {
+    setAuxiliaryFees(prev => prev.filter((_, i) => i !== index));
+  };
 
   return (
-    <Modal isOpen onClose={onClose} title={t('packing_list.create_shipment')} size="md">
+    <Modal isOpen onClose={onClose} title={t('packing_list.create_shipment')} size="lg">
       <div className="space-y-4">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
           <p className="text-sm text-blue-800 font-medium mb-2">{t('packing_list.shipment_from_pl')}</p>
-          <div className="grid grid-cols-3 gap-2 text-xs">
-            <div><span className="text-gray-500">{t('packing_list.items_count')}:</span> <span className="font-medium">{packingList.items?.length || 0}</span></div>
-            <div><span className="text-gray-500">{t('packing_list.total_cbm')}:</span> <span className="font-medium">{Number(packingList.total_cbm || 0).toFixed(2)} m³</span></div>
-            <div><span className="text-gray-500">{t('packing_list.grand_total')}:</span> <span className="font-medium">{formatMoney(Number(packingList.total_amount || 0) + Number(packingList.shipping_cost || 0) + Number(packingList.additional_fees || 0))}</span></div>
+          <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+            <div><span className="text-gray-500">{t('packing_list.items_count')}:</span> <span className="font-medium">{allItems.length}</span></div>
+            <div><span className="text-gray-500">{t('packing_list.total_cbm')}:</span> <span className="font-medium">{totals.totalCbm.toFixed(4)} m³</span></div>
+            <div><span className="text-gray-500">{t('packing_list.shipping_cost')}:</span> <span className="font-medium">{formatMoney(totals.totalShipping)}</span></div>
+            <div><span className="text-gray-500">{t('packing_list.grand_total')}:</span> <span className="font-semibold text-blue-700">{formatMoney(totals.grandTotal)}</span></div>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Select label={t('shipments.origin')} value={form.origin} onChange={set('origin')}>
-            <option value="china">Chine</option>
-            <option value="dubai">Dubaï</option>
-            <option value="turkey">Turquie</option>
-            <option value="other">Autre</option>
-          </Select>
-          <Select label={t('shipments.destination')} value={form.destination} onChange={set('destination')}>
-            <option value="Goma">Goma</option>
-            <option value="Lubumbashi">Lubumbashi</option>
-            <option value="Kinshasa">Kinshasa</option>
-            <option value="Beni">Beni</option>
-            <option value="Butembo">Butembo</option>
-            <option value="Bunia">Bunia</option>
-            <option value="Bukavu">Bukavu</option>
-            <option value="Autre">Autre</option>
-          </Select>
+        <div className="border rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 sticky top-0">
+              <tr>
+                <th className="px-2 py-1.5 text-left">{t('packing_list.description')}</th>
+                <th className="px-2 py-1.5 text-center">{t('packing_list.quantity')}</th>
+                <th className="px-2 py-1.5 text-center">{t('packing_list.weight')}</th>
+                <th className="px-2 py-1.5 text-center">
+                  <div className="flex items-center justify-center gap-1">
+                    <Box className="w-3 h-3" />
+                    {t('packing_list.cbm')}
+                  </div>
+                </th>
+                <th className="px-2 py-1.5 text-center">
+                  <div className="flex items-center justify-center gap-1">
+                    <DollarSign className="w-3 h-3" />
+                    {t('packing_list.price')}
+                  </div>
+                </th>
+                <th className="px-2 py-1.5 text-center">{t('packing_list.total')}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {allItems.map(item => {
+                const updates = itemUpdates[item.id] || {};
+                const cbm = updates.cbm !== undefined ? Number(updates.cbm) : Number(item.cbm || 0);
+                const price = updates.price !== undefined ? Number(updates.price) : Number(item.price || 0);
+                const quantity = Number(item.quantity || 1);
+                const weight = Number(item.weight || 0);
+                const itemTotal = price * quantity;
+
+                return (
+                  <tr key={item.id}>
+                    <td className="px-2 py-1.5">
+                      <div className="font-medium max-w-[200px] truncate" title={item.description}>
+                        {item.description}
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5 text-center">{quantity}</td>
+                    <td className="px-2 py-1.5 text-center">{(weight * quantity).toFixed(2)} kg</td>
+                    <td className="px-2 py-1.5 text-center">
+                      <Input
+                        type="number"
+                        step="0.0001"
+                        min="0"
+                        value={cbm}
+                        onChange={(e) => updateItem(item.id, 'cbm', e.target.value)}
+                        className="w-20 h-6 text-xs text-center"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={price}
+                        onChange={(e) => updateItem(item.id, 'price', e.target.value)}
+                        className="w-20 h-6 text-xs text-center"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 text-center font-medium">
+                      {formatMoney(itemTotal)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
 
-        <div>
-          <Select label={t('shipments.cargo_type')} value={form.cargo_type} onChange={set('cargo_type')}>
-            <option value="sea">{t('shipments.cargo_sea')}</option>
-            <option value="air">{t('shipments.cargo_air')}</option>
-          </Select>
-        </div>
-
-        {form.cargo_type === 'sea' ? (
-          <Input label={t('shipments.container_code')} value={form.container_code} onChange={set('container_code')} placeholder="Ex: CNTR-2026-001" />
-        ) : (
-          <Input label={t('shipments.flight_reference')} value={form.flight_reference} onChange={set('flight_reference')} placeholder="Ex: TK-1920" />
-        )}
-
-        <div>
-          <Input label={t('shipments.estimated_arrival')} type="date" value={form.estimated_arrival} onChange={set('estimated_arrival')} />
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {arrivalPresets.map((p, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => {
-                  const d = new Date();
-                  d.setDate(d.getDate() + (p.weeks || 0) * 7);
-                  d.setMonth(d.getMonth() + (p.months || 0));
-                  setForm(prev => ({ ...prev, estimated_arrival: d.toISOString().split('T')[0] }));
-                }}
-                className="px-2.5 py-1 text-xs font-medium rounded-full border border-gray-200 text-gray-600 hover:bg-primary-50 hover:text-primary-700 hover:border-primary-200 transition-colors"
-              >
-                {p.label}
-              </button>
-            ))}
+        <div className="border rounded-lg p-3">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-medium text-gray-900">{t('packing_list.auxiliary_fees')}</h4>
+            <Button type="button" size="sm" variant="outline" onClick={addAuxiliaryFee}>
+              <Plus className="w-3 h-3 mr-1" />
+              {t('common.add')}
+            </Button>
           </div>
+          {auxiliaryFees.length === 0 ? (
+            <p className="text-xs text-gray-500 text-center py-4">{t('packing_list.no_auxiliary_fees')}</p>
+          ) : (
+            <div className="space-y-2">
+              {auxiliaryFees.map((fee, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <Input
+                    placeholder={t('packing_list.fee_description')}
+                    value={fee.description}
+                    onChange={(e) => updateAuxiliaryFee(index, 'description', e.target.value)}
+                    className="flex-1 h-8 text-xs"
+                  />
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={fee.amount}
+                    onChange={(e) => updateAuxiliaryFee(index, 'amount', e.target.value)}
+                    className="w-24 h-8 text-xs text-center"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => removeAuxiliaryFee(index)}
+                    className="h-8 w-8 p-0"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <Textarea label={t('shipments.notes')} value={form.special_instructions} onChange={set('special_instructions')} rows={2} />
 
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
-          <Button onClick={() => onSubmit(form)} disabled={loading}>
+          <Button onClick={() => {
+            const formattedItemUpdates = Object.entries(itemUpdates)
+              .filter(([_, updates]) => Object.keys(updates).length > 0)
+              .map(([id, updates]) => ({ id: parseInt(id), ...updates }));
+            onSubmit({ ...form, itemUpdates: formattedItemUpdates, auxiliaryFees });
+          }} disabled={loading}>
             <Truck className="w-4 h-4 mr-2" />
             {loading ? t('common.saving') : t('packing_list.create_shipment')}
           </Button>
@@ -1227,16 +1364,106 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
     estimated_arrival: '',
     special_instructions: '',
   });
+  const [itemUpdates, setItemUpdates] = useState({});
+  const [auxiliaryFees, setAuxiliaryFees] = useState([]);
   const set = (f) => (e) => setForm(prev => ({ ...prev, [f]: e.target.value }));
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
 
-  const totalCbm = packingLists.reduce((s, pl) => s + Number(pl.total_cbm || 0), 0);
-  const totalWeight = packingLists.reduce((s, pl) => s + Number(pl.total_weight || 0), 0);
-  const totalAmount = packingLists.reduce((s, pl) => s + Number(pl.total_amount || 0), 0);
-  const totalShipping = packingLists.reduce((s, pl) => s + Number(pl.shipping_cost || 0), 0);
-  const totalFees = packingLists.reduce((s, pl) => s + Number(pl.additional_fees || 0), 0);
-  const grandTotal = totalAmount + totalShipping + totalFees;
-  const totalItems = packingLists.reduce((s, pl) => s + Number(pl.items_count || pl.items?.length || 0), 0);
+  // Flatten all items from all packing lists
+  const allItems = useMemo(() => {
+    return packingLists.flatMap(pl => 
+      (pl.items || []).map(item => ({
+        ...item,
+        packingListRef: pl.reference,
+        packingListId: pl.id,
+      }))
+    );
+  }, [packingLists]);
+
+  // Calculate totals with updates
+  const totals = useMemo(() => {
+    let totalCbm = 0;
+    let totalWeight = 0;
+    let totalAmount = 0;
+    let totalShipping = 0;
+    let totalFees = 0;
+
+    packingLists.forEach(pl => {
+      totalFees += Number(pl.additional_fees || 0);
+    });
+
+    allItems.forEach(item => {
+      const updates = itemUpdates[item.id] || {};
+      const cbm = updates.cbm !== undefined ? Number(updates.cbm) : Number(item.cbm || 0);
+      const price = updates.price !== undefined ? Number(updates.price) : Number(item.price || 0);
+      const quantity = Number(item.quantity || 1);
+
+      totalCbm += cbm * quantity;
+      totalAmount += price * quantity;
+      totalWeight += Number(item.weight || 0) * quantity;
+    });
+
+    // Calculate shipping cost based on updated CBM and packing list price_per_cbm
+    packingLists.forEach(pl => {
+      const plPricePerCbm = Number(pl.price_per_cbm || 0);
+      // Calculate this packing list's portion of total CBM
+      const plItems = allItems.filter(item => item.packingListId === pl.id);
+      let plCbm = 0;
+      plItems.forEach(item => {
+        const updates = itemUpdates[item.id] || {};
+        const cbm = updates.cbm !== undefined ? Number(updates.cbm) : Number(item.cbm || 0);
+        const quantity = Number(item.quantity || 1);
+        plCbm += cbm * quantity;
+      });
+      totalShipping += plCbm * plPricePerCbm;
+    });
+
+    const auxiliaryTotal = auxiliaryFees.reduce((sum, fee) => sum + Number(fee.amount || 0), 0);
+    const grandTotal = totalAmount + totalShipping + totalFees + auxiliaryTotal;
+
+    return { totalCbm, totalWeight, totalAmount, totalShipping, totalFees, auxiliaryTotal, grandTotal };
+  }, [packingLists, allItems, itemUpdates, auxiliaryFees]);
+
+  const updateItem = (itemId, field, value) => {
+    // Basic validation
+    if (field === 'cbm' || field === 'price') {
+      const numValue = parseFloat(value);
+      if (isNaN(numValue) || numValue < 0) {
+        return; // Don't update with invalid values
+      }
+      value = numValue;
+    }
+
+    setItemUpdates(prev => ({
+      ...prev,
+      [itemId]: {
+        ...prev[itemId],
+        [field]: value,
+      },
+    }));
+  };
+
+  const addAuxiliaryFee = () => {
+    setAuxiliaryFees(prev => [...prev, { description: '', amount: 0 }]);
+  };
+
+  const updateAuxiliaryFee = (index, field, value) => {
+    if (field === 'amount') {
+      const numValue = parseFloat(value);
+      if (isNaN(numValue) || numValue < 0) {
+        return; // Don't update with invalid values
+      }
+      value = numValue;
+    }
+
+    setAuxiliaryFees(prev => prev.map((fee, i) => 
+      i === index ? { ...fee, [field]: value } : fee
+    ));
+  };
+
+  const removeAuxiliaryFee = (index) => {
+    setAuxiliaryFees(prev => prev.filter((_, i) => i !== index));
+  };
 
   const arrivalPresets = [
     { label: '1 sem', weeks: 1 },
@@ -1256,49 +1483,142 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
           <p className="text-sm text-blue-800 font-medium mb-2">{t('packing_list.selected_items_summary')}</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
             <div><span className="text-gray-500">{t('packing_list.lists')}:</span> <span className="font-medium">{packingLists.length}</span></div>
-            <div><span className="text-gray-500">{t('packing_list.items_count')}:</span> <span className="font-medium">{totalItems}</span></div>
-            <div><span className="text-gray-500">{t('packing_list.total_cbm')}:</span> <span className="font-medium">{totalCbm.toFixed(4)} m³</span></div>
-            <div><span className="text-gray-500">{t('packing_list.total_weight')}:</span> <span className="font-medium">{totalWeight.toFixed(2)} kg</span></div>
+            <div><span className="text-gray-500">{t('packing_list.items_count')}:</span> <span className="font-medium">{allItems.length}</span></div>
+            <div><span className="text-gray-500">{t('packing_list.total_cbm')}:</span> <span className="font-medium">{totals.totalCbm.toFixed(4)} m³</span></div>
+            <div><span className="text-gray-500">{t('packing_list.total_weight')}:</span> <span className="font-medium">{totals.totalWeight.toFixed(2)} kg</span></div>
           </div>
           <div className="mt-2 pt-2 border-t border-blue-200 grid grid-cols-3 gap-2 text-xs">
-            <div><span className="text-gray-500">{t('packing_list.total_amount')}:</span> <span className="font-medium">{formatMoney(totalAmount)}</span></div>
-            <div><span className="text-gray-500">{t('packing_list.shipping_cost')}:</span> <span className="font-medium">{formatMoney(totalShipping)}</span></div>
-            <div><span className="text-gray-500 font-semibold">{t('packing_list.grand_total')}:</span> <span className="font-bold text-blue-700">{formatMoney(grandTotal)}</span></div>
+            <div><span className="text-gray-500">{t('packing_list.total_amount')}:</span> <span className="font-medium">{formatMoney(totals.totalAmount)}</span></div>
+            <div><span className="text-gray-500">{t('packing_list.shipping_cost')}:</span> <span className="font-medium">{formatMoney(totals.totalShipping)}</span></div>
+            <div><span className="text-gray-500">{t('packing_list.additional_fees')}:</span> <span className="font-medium">{formatMoney(totals.totalFees)}</span></div>
+          </div>
+          {auxiliaryFees.length > 0 && (
+            <div className="mt-1 text-xs">
+              <span className="text-gray-500">{t('packing_list.auxiliary_fees')}:</span> <span className="font-medium">{formatMoney(totals.auxiliaryTotal)}</span>
+            </div>
+          )}
+          <div className="mt-2 pt-2 border-t border-blue-200 text-xs">
+            <span className="text-gray-500 font-semibold">{t('packing_list.grand_total')}:</span>{' '}
+            <span className="font-bold text-blue-700">{formatMoney(totals.grandTotal)}</span>
           </div>
         </div>
 
-        <div className="border rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+        <div className="border rounded-lg overflow-hidden max-h-64 overflow-y-auto">
           <table className="w-full text-xs">
             <thead className="bg-gray-50 sticky top-0">
               <tr>
-                <th className="px-2 py-1.5 text-left">{t('packing_list.reference')}</th>
-                <th className="px-2 py-1.5 text-left">{t('packing_list.client')}</th>
-                <th className="px-2 py-1.5 text-right">{t('packing_list.items_count')}</th>
-                <th className="px-2 py-1.5 text-right">{t('packing_list.total_weight')}</th>
-                <th className="px-2 py-1.5 text-right">{t('packing_list.total_cbm')}</th>
-                <th className="px-2 py-1.5 text-right">{t('packing_list.grand_total')}</th>
+                <th className="px-2 py-1.5 text-left">{t('packing_list.description')}</th>
+                <th className="px-2 py-1.5 text-left">{t('packing_list.packing_list')}</th>
+                <th className="px-2 py-1.5 text-center">{t('packing_list.quantity')}</th>
+                <th className="px-2 py-1.5 text-center">{t('packing_list.weight')}</th>
+                <th className="px-2 py-1.5 text-center">
+                  <div className="flex items-center justify-center gap-1">
+                    <Box className="w-3 h-3" />
+                    {t('packing_list.cbm')}
+                  </div>
+                </th>
+                <th className="px-2 py-1.5 text-center">
+                  <div className="flex items-center justify-center gap-1">
+                    <DollarSign className="w-3 h-3" />
+                    {t('packing_list.price')}
+                  </div>
+                </th>
+                <th className="px-2 py-1.5 text-center">{t('packing_list.total')}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
-              {packingLists.map(pl => (
-                <tr key={pl.id}>
-                  <td className="px-2 py-1.5">
-                    <div className="font-mono font-medium">{pl.reference}</div>
-                    {pl.items && pl.items.length > 0 && (
-                      <div className="text-[10px] text-gray-400 mt-0.5 max-w-[180px] truncate" title={pl.items.map(i => i.description).join(', ')}>
-                        {pl.items.map(i => i.description).join(', ')}
+              {allItems.map(item => {
+                const updates = itemUpdates[item.id] || {};
+                const cbm = updates.cbm !== undefined ? Number(updates.cbm) : Number(item.cbm || 0);
+                const price = updates.price !== undefined ? Number(updates.price) : Number(item.price || 0);
+                const quantity = Number(item.quantity || 1);
+                const weight = Number(item.weight || 0);
+                const itemTotal = price * quantity;
+
+                return (
+                  <tr key={item.id}>
+                    <td className="px-2 py-1.5">
+                      <div className="font-medium max-w-[200px] truncate" title={item.description}>
+                        {item.description}
                       </div>
-                    )}
-                  </td>
-                  <td className="px-2 py-1.5">{pl.client?.name || '-'}</td>
-                  <td className="px-2 py-1.5 text-right">{pl.items_count || pl.items?.length || 0}</td>
-                  <td className="px-2 py-1.5 text-right">{Number(pl.total_weight || 0).toFixed(2)} kg</td>
-                  <td className="px-2 py-1.5 text-right font-mono">{Number(pl.total_cbm || 0).toFixed(4)}</td>
-                  <td className="px-2 py-1.5 text-right">{formatMoney(Number(pl.total_amount || 0) + Number(pl.shipping_cost || 0) + Number(pl.additional_fees || 0))}</td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="font-mono text-gray-600">{item.packingListRef}</div>
+                    </td>
+                    <td className="px-2 py-1.5 text-center">{quantity}</td>
+                    <td className="px-2 py-1.5 text-center">{(weight * quantity).toFixed(2)} kg</td>
+                    <td className="px-2 py-1.5 text-center">
+                      <Input
+                        type="number"
+                        step="0.0001"
+                        min="0"
+                        value={cbm}
+                        onChange={(e) => updateItem(item.id, 'cbm', e.target.value)}
+                        className="w-20 h-6 text-xs text-center"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={price}
+                        onChange={(e) => updateItem(item.id, 'price', e.target.value)}
+                        className="w-20 h-6 text-xs text-center"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 text-center font-medium">
+                      {formatMoney(itemTotal)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+        </div>
+
+        <div className="border rounded-lg p-3">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-medium text-gray-900">{t('packing_list.auxiliary_fees')}</h4>
+            <Button type="button" size="sm" variant="outline" onClick={addAuxiliaryFee}>
+              <Plus className="w-3 h-3 mr-1" />
+              {t('common.add')}
+            </Button>
+          </div>
+          {auxiliaryFees.length === 0 ? (
+            <p className="text-xs text-gray-500 text-center py-4">{t('packing_list.no_auxiliary_fees')}</p>
+          ) : (
+            <div className="space-y-2">
+              {auxiliaryFees.map((fee, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <Input
+                    placeholder={t('packing_list.fee_description')}
+                    value={fee.description}
+                    onChange={(e) => updateAuxiliaryFee(index, 'description', e.target.value)}
+                    className="flex-1 h-8 text-xs"
+                  />
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={fee.amount}
+                    onChange={(e) => updateAuxiliaryFee(index, 'amount', e.target.value)}
+                    className="w-24 h-8 text-xs text-center"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => removeAuxiliaryFee(index)}
+                    className="h-8 w-8 p-0"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -1358,7 +1678,12 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
 
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
-          <Button onClick={() => onSubmit(form)} disabled={loading}>
+          <Button onClick={() => {
+            const formattedItemUpdates = Object.entries(itemUpdates)
+              .filter(([_, updates]) => Object.keys(updates).length > 0)
+              .map(([id, updates]) => ({ id: parseInt(id), ...updates }));
+            onSubmit({ ...form, itemUpdates: formattedItemUpdates, auxiliaryFees });
+          }} disabled={loading}>
             <Truck className="w-4 h-4 mr-2" />
             {loading ? t('common.saving') : t('packing_list.create_shipment')}
           </Button>
