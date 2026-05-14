@@ -98,6 +98,7 @@ export default function ShipmentsPage() {
         )}
       </div>
 
+      
       <Card>
         <CardBody>
           <form onSubmit={handleSearch} className="flex flex-wrap gap-3">

@@ -287,138 +287,164 @@ export default function TrackingPage() {
               </div>
             </div>
 
-            {/* Packing Lists — full details table */}
-            {packingLists.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-                <h3 className="font-semibold text-gray-900 mb-6 flex items-center gap-2">
-                  <Package className="w-5 h-5 text-primary-600" />
-                  {t('tracking.contents')}
-                </h3>
-                <div className="space-y-6">
-                  {packingLists.map((pl, plIndex) => {
-                    const items = pl.items || [];
-                    const showCbm = items.some((it) => Number(it.cbm || 0) > 0) || Number(pl.total_cbm || 0) > 0;
-                    const showDims = items.some((it) => Number(it.length || 0) > 0 || Number(it.width || 0) > 0 || Number(it.height || 0) > 0);
-                    const fmtMoney = (v) => (v == null || v === '' ? '-' : `$${Number(v).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`);
-                    return (
-                      <div key={plIndex} className="border border-gray-100 rounded-lg overflow-hidden">
-                        <div className="bg-gray-50 px-4 py-3 flex flex-wrap items-center justify-between gap-2 border-b border-gray-100">
-                          <div className="text-sm">
-                            <span className="font-semibold text-gray-900">{t('tracking.packing_list')}</span>
-                            <span className="font-mono ml-2 text-primary-700">{pl.reference}</span>
-                            {pl.status && (
-                              <span className="ml-2 text-[11px] uppercase tracking-wide text-gray-500">· {pl.status}</span>
-                            )}
-                          </div>
-                          <div className="text-xs text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
-                            {Number(pl.parcel_count || 0) > 0 && <span><span className="text-gray-400">Colis:</span> <span className="font-medium">{pl.parcel_count}</span></span>}
-                            {Number(pl.gross_weight_kg || pl.total_weight || 0) > 0 && (
-                              <span><span className="text-gray-400">Poids:</span> <span className="font-medium">{Number(pl.gross_weight_kg || pl.total_weight).toFixed(2)} kg</span></span>
-                            )}
-                            {Number(pl.total_cbm || pl.header_cbm || 0) > 0 && (
-                              <span><span className="text-gray-400">CBM:</span> <span className="font-medium">{Number(pl.total_cbm || pl.header_cbm).toFixed(4)} m³</span></span>
-                            )}
-                            {Number(pl.price_per_cbm || 0) > 0 && (
-                              <span><span className="text-gray-400">$/CBM:</span> <span className="font-medium">{fmtMoney(pl.price_per_cbm)}</span></span>
-                            )}
-                          </div>
-                        </div>
+            {/* Packing Lists — unified items table */}
+            {packingLists.length > 0 && (() => {
+              const fmtMoney = (v) => (v == null || v === '' ? '-' : `$${Number(v).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`);
 
-                        {items.length === 0 ? (
-                          <div className="px-4 py-6 text-sm text-center text-gray-400">{t('tracking.no_items') || 'Aucun article détaillé.'}</div>
-                        ) : (
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                              <thead className="bg-white">
-                                <tr className="border-b border-gray-100 text-left text-xs text-gray-500">
-                                  <th className="px-3 py-2">{t('packing_list.description')}</th>
-                                  <th className="px-3 py-2 text-center w-16">{t('packing_list.qty')}</th>
-                                  <th className="px-3 py-2 text-right w-24">{t('packing_list.weight')}</th>
-                                  {showDims && <th className="px-3 py-2 text-center w-32">{t('packing_list.dimensions') || 'L × l × H'}</th>}
-                                  {showCbm && <th className="px-3 py-2 text-right w-24">{t('packing_list.cbm')}</th>}
-                                  <th className="px-3 py-2 text-right w-28">{t('packing_list.unit_price')}</th>
-                                  <th className="px-3 py-2 text-right w-28">{t('packing_list.total')}</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-100">
-                                {items.map((item, i) => {
-                                  const dims = [item.length, item.width, item.height]
-                                    .map((v) => (Number(v || 0) > 0 ? Number(v) : null));
-                                  const dimsLabel = dims.every((v) => v) ? dims.map((v) => v).join(' × ') + ' cm' : '-';
-                                  return (
-                                    <tr key={i} className="align-top hover:bg-gray-50">
-                                      <td className="px-3 py-2">
-                                        <div className="text-gray-900">{item.description || '-'}</div>
-                                        {item.notes && <div className="text-xs text-gray-500 mt-0.5 italic">{item.notes}</div>}
-                                        {item.received_at && (
-                                          <div className="text-[10px] text-gray-400 mt-0.5">
-                                            {t('packing_list.received_at') || 'Reçu'}: {new Date(item.received_at).toLocaleDateString('fr-FR')}
-                                          </div>
-                                        )}
-                                      </td>
-                                      <td className="px-3 py-2 text-center">{item.quantity ?? '-'}</td>
-                                      <td className="px-3 py-2 text-right">{item.weight ? `${Number(item.weight).toFixed(2)} kg` : '-'}</td>
-                                      {showDims && <td className="px-3 py-2 text-center text-xs text-gray-600">{dimsLabel}</td>}
-                                      {showCbm && <td className="px-3 py-2 text-right font-mono">{item.cbm ? Number(item.cbm).toFixed(4) : '-'}</td>}
-                                      <td className="px-3 py-2 text-right">{fmtMoney(item.unit_price)}</td>
-                                      <td className="px-3 py-2 text-right font-medium">{fmtMoney(item.total_price)}</td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                              <tfoot className="bg-gray-50">
-                                {(() => {
-                                  const colsAfterDesc = 1 + (showDims ? 1 : 0) + (showCbm ? 1 : 0) + 1; // qty, [dims], [cbm], unit_price
-                                  return (
-                                    <>
-                                      <tr className="text-xs">
-                                        <td className="px-3 py-2 text-right text-gray-500 font-medium" colSpan={2}>{t('packing_list.totals') || 'Totaux'}</td>
-                                        <td className="px-3 py-2 text-right font-medium">{Number(pl.total_weight || 0).toFixed(2)} kg</td>
-                                        {showDims && <td />}
-                                        {showCbm && <td className="px-3 py-2 text-right font-mono font-medium">{Number(pl.total_cbm || 0).toFixed(4)}</td>}
-                                        <td />
-                                        <td className="px-3 py-2 text-right font-bold text-gray-900">{fmtMoney(pl.total_amount)}</td>
-                                      </tr>
-                                      {Number(pl.shipping_cost || 0) > 0 && (
-                                        <tr className="text-xs">
-                                          <td className="px-3 py-2 text-right text-gray-500" colSpan={1 + colsAfterDesc}>
-                                            {t('packing_list.shipping_cost')}
-                                          </td>
-                                          <td className="px-3 py-2 text-right text-gray-700">
-                                            {fmtMoney(pl.shipping_cost)}
-                                          </td>
-                                        </tr>
-                                      )}
-                                      {Number(pl.additional_fees || 0) > 0 && (
-                                        <tr className="text-xs bg-amber-50">
-                                          <td className="px-3 py-2 text-right text-amber-700 font-medium" colSpan={1 + colsAfterDesc}>
-                                            {t('packing_list.auxiliary_fees') || 'Frais auxiliaires'}
-                                            {pl.fees_description && <span className="ml-2 text-amber-600 italic">— {pl.fees_description}</span>}
-                                          </td>
-                                          <td className="px-3 py-2 text-right text-amber-700 font-semibold">
-                                            {fmtMoney(pl.additional_fees)}
-                                          </td>
-                                        </tr>
-                                      )}
-                                    </>
-                                  );
-                                })()}
-                              </tfoot>
-                            </table>
-                          </div>
-                        )}
+              // Flatten every PL into row entries. PLs without items still get one fallback row.
+              const rows = packingLists.flatMap((pl) => {
+                const items = pl.items || [];
+                if (items.length === 0) {
+                  return [{
+                    kind: 'pl',
+                    pl,
+                    description: pl.notes || `${pl.parcel_count || 1} colis — ${pl.reference}`,
+                    quantity: pl.parcel_count || 1,
+                    weight: Number(pl.gross_weight_kg || pl.total_weight || 0),
+                    cbm: Number(pl.header_cbm || pl.total_cbm || 0),
+                    unit_price: null,
+                    total_price: Number(pl.total_amount || 0),
+                    dimensions: null,
+                    notes: pl.notes,
+                  }];
+                }
+                return items.map((it) => ({
+                  kind: 'item',
+                  pl,
+                  description: it.description,
+                  quantity: it.quantity ?? 1,
+                  weight: Number(it.weight || 0) * Number(it.quantity || 1),
+                  cbm: Number(it.cbm || 0),
+                  unit_price: it.unit_price,
+                  total_price: it.total_price,
+                  dimensions: [it.length, it.width, it.height]
+                    .map((v) => (Number(v || 0) > 0 ? Number(v) : null)),
+                  notes: it.notes,
+                  received_at: it.received_at,
+                }));
+              });
 
-                        {pl.notes && (
-                          <div className="px-4 py-2 text-xs text-gray-500 border-t border-gray-100 bg-gray-50/50">
-                            <span className="font-medium">Notes:</span> {pl.notes}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+              const showDims = rows.some(r => r.dimensions && r.dimensions.every(Boolean));
+              const showCbm = rows.some(r => Number(r.cbm || 0) > 0);
+              const totalQty = rows.reduce((s, r) => s + Number(r.quantity || 0), 0);
+              const totalWeight = rows.reduce((s, r) => s + Number(r.weight || 0), 0);
+              const totalCbm = rows.reduce((s, r) => s + Number(r.cbm || 0), 0);
+              const totalAmount = rows.reduce((s, r) => s + Number(r.total_price || 0), 0);
+
+              return (
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-6">
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <Package className="w-5 h-5 text-primary-600" />
+                    {t('tracking.contents')}
+                    <span className="text-xs text-gray-400 font-normal">({rows.length})</span>
+                  </h3>
+
+                  {/* Unified flat items table */}
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr className="border-b border-gray-100 text-left text-xs text-gray-500 uppercase tracking-wide">
+                            <th className="px-3 py-2">{t('tracking.packing_list')}</th>
+                            <th className="px-3 py-2">{t('packing_list.description')}</th>
+                            <th className="px-3 py-2 text-center w-16">{t('packing_list.qty')}</th>
+                            <th className="px-3 py-2 text-right w-24">{t('packing_list.weight')}</th>
+                            {showDims && <th className="px-3 py-2 text-center w-32">{t('packing_list.dimensions') || 'L × l × H'}</th>}
+                            {showCbm && <th className="px-3 py-2 text-right w-24">{t('packing_list.cbm')}</th>}
+                            <th className="px-3 py-2 text-right w-28">{t('packing_list.unit_price')}</th>
+                            <th className="px-3 py-2 text-right w-28">{t('packing_list.total')}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {rows.map((r, i) => {
+                            const dimsLabel = r.dimensions && r.dimensions.every(Boolean)
+                              ? r.dimensions.join(' × ') + ' cm'
+                              : '-';
+                            return (
+                              <tr key={i} className="align-top hover:bg-gray-50">
+                                <td className="px-3 py-2 whitespace-nowrap">
+                                  <div className="font-mono text-xs text-primary-700">{r.pl.reference}</div>
+                                  {r.pl.status && (
+                                    <div className="text-[10px] uppercase tracking-wide text-gray-400 mt-0.5">{r.pl.status}</div>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="text-gray-900">{r.description || '-'}</div>
+                                  {r.notes && <div className="text-xs text-gray-500 mt-0.5 italic">📝 {r.notes}</div>}
+                                  {r.received_at && (
+                                    <div className="text-[10px] text-gray-400 mt-0.5">
+                                      {t('packing_list.received_at') || 'Reçu'}: {new Date(r.received_at).toLocaleDateString('fr-FR')}
+                                    </div>
+                                  )}
+                                  {r.kind === 'pl' && (
+                                    <div className="text-[10px] text-gray-400 mt-0.5 italic">
+                                      Pas d'articles individuels — totaux déclarés au niveau de la liste
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-center">{r.quantity ?? '-'}</td>
+                                <td className="px-3 py-2 text-right">{Number(r.weight || 0) > 0 ? `${Number(r.weight).toFixed(2)} kg` : '-'}</td>
+                                {showDims && <td className="px-3 py-2 text-center text-xs text-gray-600">{dimsLabel}</td>}
+                                {showCbm && <td className="px-3 py-2 text-right font-mono">{Number(r.cbm || 0) > 0 ? Number(r.cbm).toFixed(4) : '-'}</td>}
+                                <td className="px-3 py-2 text-right">{fmtMoney(r.unit_price)}</td>
+                                <td className="px-3 py-2 text-right font-medium">{fmtMoney(r.total_price)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot className="bg-gray-50 border-t">
+                          <tr className="text-xs">
+                            <td className="px-3 py-2 text-right text-gray-600 font-medium" colSpan={2}>{t('packing_list.totals') || 'Totaux'}</td>
+                            <td className="px-3 py-2 text-center font-mono font-semibold">{totalQty}</td>
+                            <td className="px-3 py-2 text-right font-medium">{totalWeight.toFixed(2)} kg</td>
+                            {showDims && <td />}
+                            {showCbm && <td className="px-3 py-2 text-right font-mono font-medium">{totalCbm.toFixed(4)}</td>}
+                            <td />
+                            <td className="px-3 py-2 text-right font-bold text-gray-900">{fmtMoney(totalAmount)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Per-PL fees breakdown (only if any PL has shipping/aux fees) */}
+                  {packingLists.some(pl => Number(pl.shipping_cost || 0) > 0 || Number(pl.additional_fees || 0) > 0) && (
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr className="border-b border-gray-100 text-left text-xs text-gray-500 uppercase tracking-wide">
+                            <th className="px-3 py-2">{t('tracking.packing_list')}</th>
+                            <th className="px-3 py-2 text-right">{t('packing_list.shipping_cost')}</th>
+                            <th className="px-3 py-2 text-right">{t('packing_list.auxiliary_fees') || 'Frais auxiliaires'}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {packingLists.map((pl) => (
+                            <tr key={`fees-${pl.id}`} className="align-top">
+                              <td className="px-3 py-2 whitespace-nowrap font-mono text-xs text-primary-700">{pl.reference}</td>
+                              <td className="px-3 py-2 text-right">
+                                {Number(pl.shipping_cost || 0) > 0 ? fmtMoney(pl.shipping_cost) : '-'}
+                                {Number(pl.price_per_cbm || 0) > 0 && Number(pl.total_cbm || 0) > 0 && (
+                                  <div className="text-[10px] text-gray-400">
+                                    {Number(pl.total_cbm).toFixed(4)} CBM × {fmtMoney(pl.price_per_cbm)}/CBM
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                {Number(pl.additional_fees || 0) > 0 ? (
+                                  <span className="text-amber-700 font-semibold">{fmtMoney(pl.additional_fees)}</span>
+                                ) : '-'}
+                                {pl.fees_description && <div className="text-[10px] text-amber-600 italic">{pl.fees_description}</div>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Photos gallery — aggregated across all packing lists, shown at the end */}
             {(() => {

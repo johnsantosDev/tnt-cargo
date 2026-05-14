@@ -147,7 +147,6 @@ export default function PaymentDetailPage() {
             </Card>
           )}
 
-
           {payment.notes && (
             <Card>
               <CardHeader><h3 className="font-semibold">{t('common.notes')}</h3></CardHeader>
@@ -158,6 +157,7 @@ export default function PaymentDetailPage() {
           )}
         </div>
       </div>
+    
 
       {/* Proof preview modal */}
       {previewProof && proofUrl && (

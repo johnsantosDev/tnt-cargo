@@ -27,7 +27,7 @@ export default function ShipmentDetailPage() {
   const [docUrls, setDocUrls] = useState({});
   const [previewDoc, setPreviewDoc] = useState(null);
   const [packingLists, setPackingLists] = useState([]);
-  const [packingListModalId, setPackingListModalId] = useState(null);
+  const [packingListModal, setPackingListModal] = useState(null); // { id, openInEdit? } | null
   const [showCreatePackingList, setShowCreatePackingList] = useState(false);
   const [calcLines, setCalcLines] = useState([{ description: '', amount: '' }]);
   const [savingCalc, setSavingCalc] = useState(false);
@@ -432,9 +432,14 @@ export default function ShipmentDetailPage() {
                         {t('packing_list.shipping_cost')}: <span className="font-medium text-blue-600">{formatMoney(pl.shipping_cost)}</span>
                       </div>
                       {hasPermission('shipments.edit') && (
-                        <Button size="sm" variant="outline" onClick={() => setPackingListModalId(pl.id)}>
-                          <Edit3 className="w-3.5 h-3.5 mr-1" />{t('shipments.open_packing_list')}
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="outline" onClick={() => setPackingListModal({ id: pl.id })}>
+                            <Eye className="w-3.5 h-3.5 mr-1" />{t('shipments.open_packing_list')}
+                          </Button>
+                          <Button size="sm" onClick={() => setPackingListModal({ id: pl.id, openInEdit: true })} title={t('common.edit') || 'Modifier'}>
+                            <Edit3 className="w-3.5 h-3.5 mr-1" />{t('common.edit') || 'Modifier'}
+                          </Button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -523,10 +528,11 @@ export default function ShipmentDetailPage() {
         </Card>
       )}
 
-      {packingListModalId && (
+      {packingListModal && (
         <PackingListDetailModal
-          listId={packingListModalId}
-          onClose={() => { setPackingListModalId(null); loadPackingLists(); fetch(); }}
+          listId={packingListModal.id}
+          openInEdit={!!packingListModal.openInEdit}
+          onClose={() => { setPackingListModal(null); loadPackingLists(); fetch(); }}
           onRefresh={loadPackingLists}
           afterMutation={() => { loadPackingLists(); fetch(); }}
         />

@@ -23,8 +23,13 @@ export default function PackingListsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
-  const [showDetail, setShowDetail] = useState(null);
+  const [showDetail, setShowDetail] = useState(null); // { id, openInEdit? }
   const [selectedPLs, setSelectedPLs] = useState([]);
+  // Cache of full row data for every selected list, keyed by id.
+  // Required because users can select rows on page 1, paginate to page 2 and
+  // select more — `lists` only contains the current page, so without this
+  // cache the create-shipment modal would lose all off-page selections.
+  const [selectedListsCache, setSelectedListsCache] = useState({});
   const [showCreateShipmentFromPLs, setShowCreateShipmentFromPLs] = useState(false);
   const [shipmentLoading, setShipmentLoading] = useState(false);
 
@@ -34,7 +39,17 @@ export default function PackingListsPage() {
     if (search) params.search = search;
     if (statusFilter) params.status = statusFilter;
     api.get('/packing-lists', { params })
-      .then(({ data }) => { setLists(data.data); setMeta(data.meta || data); })
+      .then(({ data }) => {
+        const rows = data.data;
+        setLists(rows);
+        setMeta(data.meta || data);
+        // Refresh cache entries for any selected row that's on this page (data may have changed)
+        setSelectedListsCache(prev => {
+          const next = { ...prev };
+          rows.forEach(r => { if (next[r.id]) next[r.id] = r; });
+          return next;
+        });
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [page, search, statusFilter]);
@@ -54,6 +69,11 @@ export default function PackingListsPage() {
     try {
       await api.delete(`/packing-lists/${id}`);
       setSelectedPLs(prev => prev.filter(plId => plId !== id));
+      setSelectedListsCache(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
       fetchLists();
       toast.success(t('common.deleted'));
     } catch (err) { toast.error(err.response?.data?.message || t('common.error')); }
@@ -61,10 +81,39 @@ export default function PackingListsPage() {
 
   const toggleSelectPL = (id) => {
     setSelectedPLs(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setSelectedListsCache(prev => {
+      if (prev[id]) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      const row = lists.find(l => l.id === id);
+      return row ? { ...prev, [id]: row } : prev;
+    });
   };
 
   const toggleSelectAll = (checked) => {
-    setSelectedPLs(checked ? lists.map(l => l.id) : []);
+    if (checked) {
+      setSelectedPLs(prev => Array.from(new Set([...prev, ...lists.map(l => l.id)])));
+      setSelectedListsCache(prev => {
+        const next = { ...prev };
+        lists.forEach(l => { next[l.id] = l; });
+        return next;
+      });
+    } else {
+      const pageIds = new Set(lists.map(l => l.id));
+      setSelectedPLs(prev => prev.filter(id => !pageIds.has(id)));
+      setSelectedListsCache(prev => {
+        const next = { ...prev };
+        pageIds.forEach(id => delete next[id]);
+        return next;
+      });
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedPLs([]);
+    setSelectedListsCache({});
   };
 
   const handleCreateShipmentFromPLs = async (data) => {
@@ -74,7 +123,7 @@ export default function PackingListsPage() {
         ...data,
         packing_list_ids: selectedPLs,
       });
-      setSelectedPLs([]);
+      clearSelection();
       setShowCreateShipmentFromPLs(false);
       fetchLists();
       navigate(`/dashboard/shipments/${res.shipment.id}`);
@@ -83,7 +132,11 @@ export default function PackingListsPage() {
     } finally { setShipmentLoading(false); }
   };
 
-  const selectedListsData = lists.filter(l => selectedPLs.includes(l.id));
+  // Pull full data from the cache so off-page selections are preserved.
+  // Falls back to id-only objects for selections whose data hasn't been fetched (shouldn't normally happen).
+  const selectedListsData = selectedPLs
+    .map(id => selectedListsCache[id] || lists.find(l => l.id === id) || { id })
+    .filter(Boolean);
 
   const exportColumns = [
     { key: 'reference', label: t('packing_list.reference') },
@@ -146,7 +199,7 @@ export default function PackingListsPage() {
                     <th className="px-3 py-3 text-center w-10">
                       <input
                         type="checkbox"
-                        checked={lists.length > 0 && selectedPLs.length === lists.length}
+                        checked={lists.length > 0 && lists.every(l => selectedPLs.includes(l.id))}
                         onChange={(e) => toggleSelectAll(e.target.checked)}
                         className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                       />
@@ -204,8 +257,17 @@ export default function PackingListsPage() {
                         <td className="px-4 py-3 whitespace-nowrap text-gray-700">{formatDate(row.created_at)}</td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <div className="flex gap-1">
-                            <button onClick={() => setShowDetail(row)} className="p-1.5 text-gray-400 hover:text-primary-600"><Eye className="w-4 h-4" /></button>
-                            {isManager && <button onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>}
+                            <button onClick={() => setShowDetail({ id: row.id })} className="p-1.5 text-gray-400 hover:text-primary-600" title={t('common.view') || 'Voir'}><Eye className="w-4 h-4" /></button>
+                            {(row.status === 'draft' || isManager) && (
+                              <button
+                                onClick={() => setShowDetail({ id: row.id, openInEdit: true })}
+                                className="p-1.5 text-gray-400 hover:text-primary-600"
+                                title={t('common.edit') || 'Modifier'}
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                            )}
+                            {isManager && <button onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-400 hover:text-red-600" title={t('common.delete') || 'Supprimer'}><Trash2 className="w-4 h-4" /></button>}
                           </div>
                         </td>
                       </tr>
@@ -237,12 +299,19 @@ export default function PackingListsPage() {
           <Button size="sm" onClick={() => setShowCreateShipmentFromPLs(true)}>
             <Truck className="w-4 h-4 mr-1" />{t('packing_list.create_shipment_selected')}
           </Button>
-          <button onClick={() => setSelectedPLs([])} className="text-gray-400 hover:text-white text-xs ml-2">✕</button>
+          <button onClick={clearSelection} className="text-gray-400 hover:text-white text-xs ml-2" title="Tout désélectionner">✕</button>
         </div>
       )}
 
       {showCreate && <CreatePackingListModal onClose={() => setShowCreate(false)} onSaved={() => { setShowCreate(false); fetchLists(); }} />}
-      {showDetail && <PackingListDetailModal listId={showDetail.id} onClose={() => setShowDetail(null)} onRefresh={fetchLists} />}
+      {showDetail && (
+        <PackingListDetailModal
+          listId={showDetail.id}
+          openInEdit={!!showDetail.openInEdit}
+          onClose={() => setShowDetail(null)}
+          onRefresh={fetchLists}
+        />
+      )}
       {showCreateShipmentFromPLs && (
         <CreateShipmentFromPLsModal
           packingLists={selectedListsData}
@@ -408,7 +477,7 @@ function CreatePackingListModal({ onClose, onSaved, initialClientId = '', initia
 }
 
 // --- Packing List Detail Modal ---
-function PackingListDetailModal({ listId, onClose, onRefresh, afterMutation }) {
+function PackingListDetailModal({ listId, onClose, onRefresh, afterMutation, openInEdit = false }) {
   const { t } = useTranslation();
   const { hasRole } = useAuth();
   const isManager = hasRole('admin') || hasRole('manager');
@@ -418,6 +487,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh, afterMutation }) {
   const [editItem, setEditItem] = useState(null);
   const [showFinalize, setShowFinalize] = useState(false);
   const [showEditDetails, setShowEditDetails] = useState(false);
+  const autoEditTriggered = useRef(false);
   const [showCreateShipment, setShowCreateShipment] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [whatsappModal, setWhatsappModal] = useState(null);
@@ -436,6 +506,14 @@ function PackingListDetailModal({ listId, onClose, onRefresh, afterMutation }) {
   }, [listId]);
 
   useEffect(() => { fetchDetail(); }, [fetchDetail]);
+
+  // When opened with openInEdit, auto-trigger the Edit Details sub-modal as soon as the PL is loaded
+  useEffect(() => {
+    if (openInEdit && pl && !autoEditTriggered.current && (pl.status === 'draft' || isManager)) {
+      autoEditTriggered.current = true;
+      setShowEditDetails(true);
+    }
+  }, [openInEdit, pl, isManager]);
 
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
 
@@ -557,8 +635,8 @@ function PackingListDetailModal({ listId, onClose, onRefresh, afterMutation }) {
 
   const isDraft = pl.status === 'draft';
   const isFinalized = pl.status === 'finalized';
-  const canEditItems = isDraft || (isManager && !!pl.shipment_id);
-  const canEditHeader = isDraft || (isManager && !!pl.shipment_id);
+  const canEditItems = isDraft || isManager;
+  const canEditHeader = isDraft || isManager;
   const showCbmCol = Number(pl.total_cbm || 0) > 0 || (pl.items || []).some((i) => Number(i.cbm || 0) > 0);
   const canFinalize =
     isDraft &&
