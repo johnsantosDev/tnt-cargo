@@ -84,10 +84,8 @@ class ShipmentController extends Controller
             'assigned_to' => 'nullable|exists:users,id',
         ]);
 
-        $defaultStatus = ShipmentStatus::where('is_default', true)->first();
-
         $validated['tracking_number'] = Shipment::generateTrackingNumber();
-        $validated['status_id'] = $defaultStatus?->id ?? 1;
+        $validated['status_id'] = ShipmentStatus::resolveDefaultStatusId();
         $validated['created_by'] = $request->user()->id;
         $validated['destination'] = $validated['destination'] ?? 'Goma';
         $validated['region'] = RegionContext::resolveWriteRegion($request);

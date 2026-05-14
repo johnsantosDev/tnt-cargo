@@ -16,6 +16,8 @@ use App\Support\RegionContext;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class PackingListController extends Controller
@@ -406,55 +408,123 @@ class PackingListController extends Controller
             'flight_reference' => 'nullable|string|max:100',
             'estimated_arrival' => 'nullable|date',
             'special_instructions' => 'nullable|string',
+            'item_updates' => 'nullable|array',
+            'item_updates.*.id' => 'required|integer|exists:packing_list_items,id',
+            'item_updates.*.cbm' => 'nullable|numeric|min:0|max:999999.9999',
+            'item_updates.*.price' => 'nullable|numeric|min:0|max:999999.99',
+            'auxiliary_fees' => 'nullable|array',
+            'auxiliary_fees.*.description' => 'required|string|max:255',
+            'auxiliary_fees.*.amount' => 'required|numeric|min:0|max:999999.99',
         ]);
 
-        $packingList->load('items');
+        try {
+            return DB::transaction(function () use ($request, $validated, $packingList) {
+                $packingList->load('items');
 
-        $itemDescriptions = $packingList->items->pluck('description')->implode(', ');
-        $description = mb_substr($itemDescriptions, 0, 500);
+                // Apply item updates if provided
+                if (!empty($validated['item_updates'])) {
+                    foreach ($validated['item_updates'] as $update) {
+                        // Security check: ensure item belongs to this packing list
+                        $item = $packingList->items()->where('id', $update['id'])->first();
+                        if (!$item) {
+                            return response()->json(['message' => 'Tentative de modification d\'un article non autorisé.'], 403);
+                        }
 
-        $defaultStatus = ShipmentStatus::where('is_default', true)->first();
+                        $updates = [];
+                        if (isset($update['cbm']) && $update['cbm'] !== null) {
+                            $updates['cbm'] = (float) $update['cbm'];
+                        }
+                        if (isset($update['price']) && $update['price'] !== null) {
+                            $updates['price'] = (float) $update['price'];
+                        }
+                        if (!empty($updates)) {
+                            $item->update($updates);
+                        }
+                    }
 
-        $shipment = Shipment::create([
-            'tracking_number' => Shipment::generateTrackingNumber(),
-            'client_id' => $packingList->client_id,
-            'package_type' => $validated['cargo_type'],
-            'container_code' => $validated['cargo_type'] === 'sea' ? ($validated['container_code'] ?? null) : ($validated['flight_reference'] ?? null),
-            'origin' => $validated['origin'],
-            'destination' => $validated['destination'] ?? 'Goma',
-            'description' => $description,
-            'weight' => $packingList->total_weight,
-            'volume' => $packingList->total_cbm,
-            'quantity' => $packingList->items->sum('quantity'),
-            'shipping_cost' => $packingList->shipping_cost,
-            'total_cost' => $packingList->total_amount + $packingList->shipping_cost,
-            'balance_due' => $packingList->total_amount + $packingList->shipping_cost,
-            'status_id' => $defaultStatus?->id ?? 1,
-            'created_by' => $request->user()->id,
-            'estimated_arrival' => $validated['estimated_arrival'] ?? null,
-            'special_instructions' => $validated['special_instructions'] ?? null,
-            'region' => $packingList->region,
-        ]);
+                    // Recalculate packing list totals
+                    $packingList->recalculateTotals();
+                    $packingList->refresh();
+                }
 
-        ShipmentHistory::create([
-            'shipment_id' => $shipment->id,
-            'status_id' => $shipment->status_id,
-            'changed_by' => $request->user()->id,
-            'comment' => "Expédition créée depuis la packing list {$packingList->reference}",
-        ]);
+                $itemDescriptions = $packingList->items->pluck('description')->implode(', ');
+                $description = mb_substr($itemDescriptions, 0, 500);
 
-        $packingList->update(['shipment_id' => $shipment->id]);
+                $totalAmount = $packingList->total_amount;
+                $totalShippingCost = $packingList->shipping_cost;
+                $totalAdditionalFees = $packingList->additional_fees ?? 0;
 
-        $shipment->client->increment('shipment_count');
+                $grandTotal = $totalAmount + $totalShippingCost + $totalAdditionalFees;
 
-        $shipment->syncTotalsFromPackingLists();
+                // Add auxiliary fees if provided
+                $auxiliaryFeesTotal = 0;
+                if (!empty($validated['auxiliary_fees'])) {
+                    $auxiliaryFeesTotal = collect($validated['auxiliary_fees'])->sum('amount');
+                    $grandTotal += $auxiliaryFeesTotal;
+                }
 
-        AuditService::log('created', $shipment, null, $shipment->toArray());
+                $statusId = ShipmentStatus::resolveDefaultStatusId();
+                if (!$statusId) {
+                    return response()->json([
+                        'message' => 'Aucun statut d\'expédition n\'est configuré. Créez un statut d\'expédition avant de créer une expédition.'
+                    ], 422);
+                }
 
-        return response()->json([
-            'message' => 'Expédition créée depuis la packing list.',
-            'shipment' => $shipment->load(['client', 'status']),
-        ], 201);
+                $shipment = Shipment::create([
+                    'tracking_number' => Shipment::generateTrackingNumber(),
+                    'client_id' => $packingList->client_id,
+                    'package_type' => $validated['cargo_type'],
+                    'container_code' => $validated['cargo_type'] === 'sea' ? ($validated['container_code'] ?? null) : ($validated['flight_reference'] ?? null),
+                    'origin' => $validated['origin'],
+                    'destination' => $validated['destination'] ?? 'Goma',
+                    'description' => $description,
+                    'weight' => $packingList->total_weight,
+                    'volume' => $packingList->total_cbm,
+                    'quantity' => $packingList->items->sum('quantity'),
+                    'shipping_cost' => $totalShippingCost,
+                    'additional_fees' => $totalAdditionalFees + $auxiliaryFeesTotal,
+                    'total_cost' => $grandTotal,
+                    'balance_due' => $grandTotal,
+                    'status_id' => $statusId,
+                    'created_by' => $request->user()->id,
+                    'estimated_arrival' => $validated['estimated_arrival'] ?? null,
+                    'special_instructions' => $validated['special_instructions'] ?? null,
+                    'region' => $packingList->region,
+                ]);
+
+                ShipmentHistory::create([
+                    'shipment_id' => $shipment->id,
+                    'status_id' => $shipment->status_id,
+                    'changed_by' => $request->user()->id,
+                    'comment' => "Expédition créée depuis la packing list {$packingList->reference}",
+                ]);
+
+                $packingList->update(['shipment_id' => $shipment->id]);
+
+                $shipment->client->increment('shipment_count');
+
+                $shipment->syncTotalsFromPackingLists();
+
+                AuditService::log('created', $shipment, null, $shipment->toArray());
+
+                return response()->json([
+                    'message' => 'Expédition créée depuis la packing list.',
+                    'shipment' => $shipment->load(['client', 'status']),
+                    'packing_list' => $packingList->fresh()->load(['client', 'shipment', 'items']),
+                ], 201);
+            });
+        } catch (\Exception $e) {
+            Log::error('Error creating shipment from packing list: ' . $e->getMessage(), [
+                'user_id' => $request->user()->id,
+                'packing_list_id' => $packingList->id,
+                'data' => $validated,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'message' => 'Une erreur inattendue s\'est produite lors de la création de l\'expédition. Veuillez réessayer.'
+            ], 500);
+        }
     }
 
     public function createShipmentFromItems(Request $request, PackingList $packingList): JsonResponse
@@ -487,7 +557,12 @@ class PackingListController extends Controller
         $itemDescriptions = $items->pluck('description')->implode(', ');
         $description = mb_substr($itemDescriptions, 0, 500);
 
-        $defaultStatus = ShipmentStatus::where('is_default', true)->first();
+        $statusId = ShipmentStatus::resolveDefaultStatusId();
+        if (!$statusId) {
+            return response()->json([
+                'message' => 'Aucun statut d\'expédition n\'est configuré. Créez un statut d\'expédition avant de créer une expédition.'
+            ], 422);
+        }
 
         $shipment = Shipment::create([
             'tracking_number' => Shipment::generateTrackingNumber(),
@@ -502,7 +577,7 @@ class PackingListController extends Controller
             'shipping_cost' => $shippingCost,
             'total_cost' => $totalAmount + $shippingCost,
             'balance_due' => $totalAmount + $shippingCost,
-            'status_id' => $defaultStatus?->id ?? 1,
+            'status_id' => $statusId,
             'created_by' => $request->user()->id,
             'estimated_arrival' => $validated['estimated_arrival'] ?? null,
             'special_instructions' => $validated['special_instructions'] ?? null,
@@ -545,89 +620,160 @@ class PackingListController extends Controller
             'flight_reference' => 'nullable|string|max:100',
             'estimated_arrival' => 'nullable|date',
             'special_instructions' => 'nullable|string',
+            'item_updates' => 'nullable|array',
+            'item_updates.*.id' => 'required|integer|exists:packing_list_items,id',
+            'item_updates.*.cbm' => 'nullable|numeric|min:0|max:999999.9999',
+            'item_updates.*.price' => 'nullable|numeric|min:0|max:999999.99',
+            'auxiliary_fees' => 'nullable|array',
+            'auxiliary_fees.*.description' => 'required|string|max:255',
+            'auxiliary_fees.*.amount' => 'required|numeric|min:0|max:999999.99',
         ]);
 
-        $packingLists = PackingList::with('items')
-            ->whereIn('id', $validated['packing_list_ids'])
-            ->get();
+        try {
+            return DB::transaction(function () use ($request, $validated) {
+                $packingLists = PackingList::with('items')
+                    ->whereIn('id', $validated['packing_list_ids'])
+                    ->get();
 
-        if ($packingLists->count() !== count($validated['packing_list_ids'])) {
-            return response()->json(['message' => 'Certaines listes de colisage sont introuvables.'], 422);
-        }
+                if ($packingLists->count() !== count($validated['packing_list_ids'])) {
+                    return response()->json(['message' => 'Certaines listes de colisage sont introuvables.'], 422);
+                }
 
-        // Check all PLs belong to the same client
-        $clientIds = $packingLists->pluck('client_id')->unique();
-        if ($clientIds->count() > 1) {
-            return response()->json(['message' => 'Toutes les listes de colisage doivent appartenir au même client.'], 422);
-        }
+                // Check all PLs belong to the same client
+                $clientIds = $packingLists->pluck('client_id')->unique();
+                if ($clientIds->count() > 1) {
+                    return response()->json(['message' => 'Toutes les listes de colisage doivent appartenir au même client.'], 422);
+                }
 
-        // Check none are already shipped
-        $alreadyShipped = $packingLists->where('shipment_id', '!=', null);
-        if ($alreadyShipped->isNotEmpty()) {
-            return response()->json(['message' => 'Certaines listes sont déjà liées à une expédition: ' . $alreadyShipped->pluck('reference')->implode(', ')], 422);
-        }
+                // Check none are already shipped
+                $alreadyShipped = $packingLists->where('shipment_id', '!=', null);
+                if ($alreadyShipped->isNotEmpty()) {
+                    return response()->json(['message' => 'Certaines listes sont déjà liées à une expédition: ' . $alreadyShipped->pluck('reference')->implode(', ')], 422);
+                }
 
-        $totalCbm = $packingLists->sum('total_cbm');
-        $totalWeight = $packingLists->sum('total_weight');
-        $totalAmount = $packingLists->sum('total_amount');
-        $totalShippingCost = $packingLists->sum('shipping_cost');
-        $totalAdditionalFees = $packingLists->sum('additional_fees');
-        $totalQty = $packingLists->sum(fn($pl) => $pl->items->sum('quantity'));
+                // Get all item IDs from selected packing lists for security validation
+                $allowedItemIds = $packingLists->flatMap(fn($pl) => $pl->items->pluck('id'))->unique()->toArray();
 
-        $allDescriptions = $packingLists->flatMap(fn($pl) => $pl->items->pluck('description'))->implode(', ');
-        $description = mb_substr($allDescriptions, 0, 500);
+                // Apply item updates if provided
+                if (!empty($validated['item_updates'])) {
+                    foreach ($validated['item_updates'] as $update) {
+                        // Security check: ensure item belongs to selected packing lists
+                        if (!in_array($update['id'], $allowedItemIds)) {
+                            return response()->json(['message' => 'Tentative de modification d\'un article non autorisé.'], 403);
+                        }
 
-        $grandTotal = $totalAmount + $totalShippingCost + $totalAdditionalFees;
+                        $item = PackingListItem::find($update['id']);
+                        if ($item) {
+                            $updates = [];
+                            if (isset($update['cbm']) && $update['cbm'] !== null) {
+                                $updates['cbm'] = (float) $update['cbm'];
+                            }
+                            if (isset($update['price']) && $update['price'] !== null) {
+                                $updates['price'] = (float) $update['price'];
+                            }
+                            if (!empty($updates)) {
+                                $item->update($updates);
+                            }
+                        }
+                    }
 
-        $defaultStatus = ShipmentStatus::where('is_default', true)->first();
+                    // Recalculate totals for affected packing lists
+                    foreach ($packingLists as $pl) {
+                        $pl->recalculateTotals();
+                    }
 
-        $shipment = Shipment::create([
-            'tracking_number' => Shipment::generateTrackingNumber(),
-            'client_id' => $clientIds->first(),
-            'package_type' => $validated['cargo_type'],
-            'container_code' => $validated['cargo_type'] === 'sea' ? ($validated['container_code'] ?? null) : ($validated['flight_reference'] ?? null),
-            'origin' => $validated['origin'],
-            'destination' => $validated['destination'] ?? 'Goma',
-            'description' => $description,
-            'weight' => $totalWeight,
-            'volume' => $totalCbm,
-            'quantity' => $totalQty,
-            'shipping_cost' => $totalShippingCost,
-            'total_cost' => $grandTotal,
-            'balance_due' => $grandTotal,
-            'status_id' => $defaultStatus?->id ?? 1,
-            'created_by' => $request->user()->id,
-            'estimated_arrival' => $validated['estimated_arrival'] ?? null,
-            'special_instructions' => $validated['special_instructions'] ?? null,
-            'region' => RegionContext::resolveWriteRegion($request),
-        ]);
+                    // Refresh packing lists with updated data
+                    $packingLists = PackingList::with('items')
+                        ->whereIn('id', $validated['packing_list_ids'])
+                        ->get();
+                }
 
-        $references = $packingLists->pluck('reference')->implode(', ');
-        ShipmentHistory::create([
-            'shipment_id' => $shipment->id,
-            'status_id' => $shipment->status_id,
-            'changed_by' => $request->user()->id,
-            'comment' => "Expédition créée depuis les listes de colisage: {$references}",
-        ]);
+                $totalCbm = $packingLists->sum('total_cbm');
+                $totalWeight = $packingLists->sum('total_weight');
+                $totalAmount = $packingLists->sum('total_amount');
+                $totalShippingCost = $packingLists->sum('shipping_cost');
+                $totalAdditionalFees = $packingLists->sum('additional_fees');
+                $totalQty = $packingLists->sum(fn($pl) => $pl->items->sum('quantity'));
 
-        // Link all packing lists to this shipment and mark as shipped
-        foreach ($packingLists as $pl) {
-            $pl->update([
-                'shipment_id' => $shipment->id,
-                'status' => 'shipped',
+                $allDescriptions = $packingLists->flatMap(fn($pl) => $pl->items->pluck('description'))->implode(', ');
+                $description = mb_substr($allDescriptions, 0, 500);
+
+                $grandTotal = $totalAmount + $totalShippingCost + $totalAdditionalFees;
+
+                // Add auxiliary fees if provided
+                $auxiliaryFeesTotal = 0;
+                if (!empty($validated['auxiliary_fees'])) {
+                    $auxiliaryFeesTotal = collect($validated['auxiliary_fees'])->sum('amount');
+                    $grandTotal += $auxiliaryFeesTotal;
+                }
+
+                $statusId = ShipmentStatus::resolveDefaultStatusId();
+                if (!$statusId) {
+                    return response()->json([
+                        'message' => 'Aucun statut d\'expédition n\'est configuré. Créez un statut d\'expédition avant de créer une expédition.'
+                    ], 422);
+                }
+
+                $shipment = Shipment::create([
+                    'tracking_number' => Shipment::generateTrackingNumber(),
+                    'client_id' => $clientIds->first(),
+                    'package_type' => $validated['cargo_type'],
+                    'container_code' => $validated['cargo_type'] === 'sea' ? ($validated['container_code'] ?? null) : ($validated['flight_reference'] ?? null),
+                    'origin' => $validated['origin'],
+                    'destination' => $validated['destination'] ?? 'Goma',
+                    'description' => $description,
+                    'weight' => $totalWeight,
+                    'volume' => $totalCbm,
+                    'quantity' => $totalQty,
+                    'shipping_cost' => $totalShippingCost,
+                    'additional_fees' => $totalAdditionalFees + $auxiliaryFeesTotal,
+                    'total_cost' => $grandTotal,
+                    'balance_due' => $grandTotal,
+                    'status_id' => $statusId,
+                    'created_by' => $request->user()->id,
+                    'estimated_arrival' => $validated['estimated_arrival'] ?? null,
+                    'special_instructions' => $validated['special_instructions'] ?? null,
+                    'region' => RegionContext::resolveWriteRegion($request),
+                ]);
+
+                $references = $packingLists->pluck('reference')->implode(', ');
+                ShipmentHistory::create([
+                    'shipment_id' => $shipment->id,
+                    'status_id' => $shipment->status_id,
+                    'changed_by' => $request->user()->id,
+                    'comment' => "Expédition créée depuis les listes de colisage: {$references}",
+                ]);
+
+                // Link all packing lists to this shipment and mark as shipped
+                foreach ($packingLists as $pl) {
+                    $pl->update([
+                        'shipment_id' => $shipment->id,
+                        'status' => 'shipped',
+                    ]);
+                }
+
+                $shipment->client->increment('shipment_count');
+
+                $shipment->syncTotalsFromPackingLists();
+
+                AuditService::log('created', $shipment, null, $shipment->toArray());
+
+                return response()->json([
+                    'message' => 'Expédition créée avec ' . $packingLists->count() . ' liste(s) de colisage.',
+                    'shipment' => $shipment->load(['client', 'status']),
+                ], 201);
+            });
+        } catch (\Exception $e) {
+            Log::error('Error creating shipment from lists: ' . $e->getMessage(), [
+                'user_id' => $request->user()->id,
+                'data' => $validated,
+                'trace' => $e->getTraceAsString()
             ]);
+
+            return response()->json([
+                'message' => 'Une erreur inattendue s\'est produite lors de la création de l\'expédition. Veuillez réessayer.'
+            ], 500);
         }
-
-        $shipment->client->increment('shipment_count');
-
-        $shipment->syncTotalsFromPackingLists();
-
-        AuditService::log('created', $shipment, null, $shipment->toArray());
-
-        return response()->json([
-            'message' => 'Expédition créée avec ' . $packingLists->count() . ' liste(s) de colisage.',
-            'shipment' => $shipment->load(['client', 'status']),
-        ], 201);
     }
 
     public function getByShipment($shipmentId): JsonResponse
