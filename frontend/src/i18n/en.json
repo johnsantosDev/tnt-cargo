@@ -87,7 +87,14 @@
     "arrival": "Arrival",
     "delivery": "Delivery",
     "enter_number": "Enter a tracking number",
-    "enter_number_desc": "Enter your TNT tracking number to track your package in real time."
+    "enter_number_desc": "Enter your TNT tracking number to track your package in real time.",
+    "contents": "Shipment Contents",
+    "packing_list": "Packing List",
+    "quantity": "Quantity",
+    "weight": "Weight",
+    "unit_price": "Unit Price",
+    "photos": "Photos",
+    "no_items": "No item details available."
   },
   "landing": {
     "login": "Sign in",
@@ -625,7 +632,11 @@
     "link_shipment_optional_id": "Optional — paste ID to link directly",
     "auxiliary_fees": "Auxiliary Fees",
     "no_auxiliary_fees": "No auxiliary fees",
-    "fee_description": "Fee description"
+    "fee_description": "Fee description",
+    "quantity": "Quantity",
+    "subtotal": "Subtotal",
+    "price": "Price",
+    "packing_list": "List"
   },
   "flight_tickets": {
     "title": "Flight Tickets",

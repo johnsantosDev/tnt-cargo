@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { Card, CardHeader, CardBody, Badge, Spinner, Button } from '../components/ui';
-import { ArrowLeft, Download, CreditCard, FileText, Image as ImageIcon, Eye, X, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Download, CreditCard, FileText, Image as ImageIcon, Eye, X, MessageCircle, CornerDownRightIcon, CornerDownLeft } from 'lucide-react';
 import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
 import { sendViaWhatsApp } from '../utils/export';
 import toast from 'react-hot-toast';
@@ -146,6 +146,7 @@ export default function PaymentDetailPage() {
               </CardBody>
             </Card>
           )}
+
 
           {payment.notes && (
             <Card>

@@ -20,6 +20,8 @@ use Illuminate\Support\Facades\Route;
 Route::post('/login', [AuthController::class, 'login']);
 Route::get('/track/{trackingNumber}', [ShipmentController::class, 'track']);
 Route::get('/track/share/{shareToken}', [ShipmentController::class, 'trackByShareToken']);
+Route::get('/track/share/{shareToken}/photos/{photo}', [ShipmentController::class, 'trackPhotoByShareToken']);
+Route::get('/track/{trackingNumber}/photos/{photo}', [ShipmentController::class, 'trackPhotoByTrackingNumber']);
 Route::get('/shipment-statuses', [ShipmentController::class, 'statuses']);
 Route::post('/chat-messages', [ChatMessageController::class, 'store']);
 Route::get('/transfers/verify/{qrToken}', [TransferController::class, 'verify']);

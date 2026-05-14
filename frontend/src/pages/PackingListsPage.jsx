@@ -1146,12 +1146,14 @@ function CreateShipmentModal({ packingList, onClose, onSubmit, loading }) {
 
     allItems.forEach(item => {
       const updates = itemUpdates[item.id] || {};
-      const cbm = updates.cbm !== undefined ? Number(updates.cbm) : Number(item.cbm || 0);
-      const price = updates.price !== undefined ? Number(updates.price) : Number(item.price || 0);
+      const cbm = updates.cbm !== undefined && updates.cbm !== '' ? Number(updates.cbm) : Number(item.cbm || 0);
+      const unitPrice = updates.unit_price !== undefined && updates.unit_price !== ''
+        ? Number(updates.unit_price)
+        : Number(item.unit_price ?? item.price ?? 0);
       const quantity = Number(item.quantity || 1);
 
       totalCbm += cbm * quantity;
-      totalAmount += price * quantity;
+      totalAmount += unitPrice * quantity;
       totalWeight += Number(item.weight || 0) * quantity;
     });
 
@@ -1166,13 +1168,10 @@ function CreateShipmentModal({ packingList, onClose, onSubmit, loading }) {
   }, [packingList, allItems, itemUpdates, auxiliaryFees]);
 
   const updateItem = (itemId, field, value) => {
-    // Basic validation
-    if (field === 'cbm' || field === 'price') {
-      const numValue = parseFloat(value);
-      if (isNaN(numValue) || numValue < 0) {
-        return; // Don't update with invalid values
+    if (field === 'cbm' || field === 'unit_price') {
+      if (value !== '' && (isNaN(parseFloat(value)) || parseFloat(value) < 0)) {
+        return;
       }
-      value = numValue;
     }
 
     setItemUpdates(prev => ({
@@ -1244,43 +1243,54 @@ function CreateShipmentModal({ packingList, onClose, onSubmit, loading }) {
             <tbody className="divide-y">
               {allItems.map(item => {
                 const updates = itemUpdates[item.id] || {};
-                const cbm = updates.cbm !== undefined ? Number(updates.cbm) : Number(item.cbm || 0);
-                const price = updates.price !== undefined ? Number(updates.price) : Number(item.price || 0);
+                const description = updates.description !== undefined ? updates.description : (item.description || '');
+                const cbmVal = updates.cbm !== undefined ? updates.cbm : (item.cbm ?? '');
+                const unitPriceVal = updates.unit_price !== undefined
+                  ? updates.unit_price
+                  : (item.unit_price ?? item.price ?? '');
+                const cbm = Number(cbmVal || 0);
+                const unitPrice = Number(unitPriceVal || 0);
                 const quantity = Number(item.quantity || 1);
                 const weight = Number(item.weight || 0);
-                const itemTotal = price * quantity;
+                const itemTotal = unitPrice * quantity;
 
                 return (
                   <tr key={item.id}>
                     <td className="px-2 py-1.5">
-                      <div className="font-medium max-w-[200px] truncate" title={item.description}>
-                        {item.description}
-                      </div>
+                      <input
+                        type="text"
+                        value={description}
+                        onChange={(e) => updateItem(item.id, 'description', e.target.value)}
+                        className="w-full px-2 py-1 border rounded text-xs"
+                      />
                     </td>
                     <td className="px-2 py-1.5 text-center">{quantity}</td>
                     <td className="px-2 py-1.5 text-center">{(weight * quantity).toFixed(2)} kg</td>
                     <td className="px-2 py-1.5 text-center">
-                      <Input
+                      <input
                         type="number"
                         step="0.0001"
                         min="0"
-                        value={cbm}
+                        value={cbmVal}
                         onChange={(e) => updateItem(item.id, 'cbm', e.target.value)}
-                        className="w-20 h-6 text-xs text-center"
+                        className="w-full px-2 py-1 border rounded text-xs text-right"
                       />
                     </td>
                     <td className="px-2 py-1.5 text-center">
-                      <Input
+                      <input
                         type="number"
                         step="0.01"
                         min="0"
-                        value={price}
-                        onChange={(e) => updateItem(item.id, 'price', e.target.value)}
-                        className="w-20 h-6 text-xs text-center"
+                        value={unitPriceVal}
+                        onChange={(e) => updateItem(item.id, 'unit_price', e.target.value)}
+                        className="w-full px-2 py-1 border rounded text-xs text-right"
                       />
                     </td>
                     <td className="px-2 py-1.5 text-center font-medium">
-                      {formatMoney(itemTotal)}
+                      <div>{formatMoney(itemTotal + cbm * quantity * Number(packingList.price_per_cbm || 0))}</div>
+                      <div className="text-[10px] text-gray-400">
+                        {(cbm * quantity).toFixed(4)} × ${Number(packingList.price_per_cbm || 0).toFixed(2)}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1294,7 +1304,7 @@ function CreateShipmentModal({ packingList, onClose, onSubmit, loading }) {
             <h4 className="text-sm font-medium text-gray-900">{t('packing_list.auxiliary_fees')}</h4>
             <Button type="button" size="sm" variant="outline" onClick={addAuxiliaryFee}>
               <Plus className="w-3 h-3 mr-1" />
-              {t('common.add')}
+              + Add
             </Button>
           </div>
           {auxiliaryFees.length === 0 ? (
@@ -1339,9 +1349,23 @@ function CreateShipmentModal({ packingList, onClose, onSubmit, loading }) {
           <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
           <Button onClick={() => {
             const formattedItemUpdates = Object.entries(itemUpdates)
-              .filter(([_, updates]) => Object.keys(updates).length > 0)
-              .map(([id, updates]) => ({ id: parseInt(id), ...updates }));
-            onSubmit({ ...form, itemUpdates: formattedItemUpdates, auxiliaryFees });
+              .filter(([, updates]) => Object.keys(updates).length > 0)
+              .map(([id, updates]) => {
+                const out = { id: parseInt(id, 10) };
+                if (updates.description !== undefined) out.description = updates.description;
+                if (updates.cbm !== undefined && updates.cbm !== '') out.cbm = Number(updates.cbm);
+                if (updates.unit_price !== undefined && updates.unit_price !== '') out.unit_price = Number(updates.unit_price);
+                else if (updates.price !== undefined && updates.price !== '') out.unit_price = Number(updates.price);
+                return out;
+              });
+            const cleanAuxiliaryFees = auxiliaryFees
+              .filter(f => Number(f.amount) > 0 && (f.description || '').trim() !== '')
+              .map(f => ({ description: f.description, amount: Number(f.amount) }));
+            onSubmit({
+              ...form,
+              item_updates: formattedItemUpdates,
+              auxiliary_fees: cleanAuxiliaryFees,
+            });
           }} disabled={loading}>
             <Truck className="w-4 h-4 mr-2" />
             {loading ? t('common.saving') : t('packing_list.create_shipment')}
@@ -1365,98 +1389,123 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
     special_instructions: '',
   });
   const [itemUpdates, setItemUpdates] = useState({});
-  const [auxiliaryFees, setAuxiliaryFees] = useState([]);
+  // Per-PL editable overrides for header_cbm and gross_weight_kg
+  const [plUpdates, setPlUpdates] = useState({});
+  // Single global price-per-CBM applied to every selected packing list.
+  // Default to 170 if no PL already has one defined.
+  const initialPricePerCbm = (() => {
+    const firstWithPrice = packingLists.find((pl) => Number(pl.price_per_cbm || 0) > 0);
+    return firstWithPrice ? String(firstWithPrice.price_per_cbm) : '170';
+  })();
+  const [globalPricePerCbm, setGlobalPricePerCbm] = useState(initialPricePerCbm);
+  // Auto-populate auxiliary fees from any selected PL that already has additional_fees.
+  // These get moved to the shipment-level aux section so each PL's additional_fees
+  // is zeroed during submit (avoids double counting).
+  const initialAuxiliaryFees = packingLists
+    .filter((pl) => Number(pl.additional_fees || 0) > 0)
+    .map((pl) => ({
+      description: pl.fees_description
+        ? `${pl.reference} — ${pl.fees_description}`
+        : `${pl.reference}`,
+      amount: Number(pl.additional_fees),
+      _fromPlId: pl.id,
+    }));
+  const [auxiliaryFees, setAuxiliaryFees] = useState(initialAuxiliaryFees);
   const set = (f) => (e) => setForm(prev => ({ ...prev, [f]: e.target.value }));
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
 
-  // Flatten all items from all packing lists
-  const allItems = useMemo(() => {
-    return packingLists.flatMap(pl => 
-      (pl.items || []).map(item => ({
-        ...item,
-        packingListRef: pl.reference,
-        packingListId: pl.id,
-      }))
-    );
-  }, [packingLists]);
+  const getItemField = (item, field) => {
+    const updates = itemUpdates[item.id] || {};
+    if (updates[field] !== undefined) return updates[field];
+    if (field === 'unit_price') {
+      return item.unit_price ?? item.price ?? '';
+    }
+    return item[field] ?? '';
+  };
 
-  // Calculate totals with updates
+  const getPlField = (pl, field) => {
+    const u = plUpdates[pl.id];
+    if (u && u[field] !== undefined) return u[field];
+    return pl[field] ?? '';
+  };
+
+  // For each PL, compute its effective CBM, weight and items-amount,
+  // preferring inline-edited values over what came from the server.
+  const plRows = useMemo(() => {
+    return packingLists.map((pl) => {
+      const items = pl.items || [];
+      const itemsCbm = items.reduce((s, it) => s + Number(getItemField(it, 'cbm') || 0) * Number(it.quantity || 1), 0);
+      const itemsWeight = items.reduce((s, it) => s + Number(it.weight || 0) * Number(it.quantity || 1), 0);
+      const itemsAmount = items.reduce((s, it) => s + Number(getItemField(it, 'unit_price') || 0) * Number(it.quantity || 1), 0);
+
+      const headerCbmEdited = plUpdates[pl.id]?.header_cbm;
+      const grossWeightEdited = plUpdates[pl.id]?.gross_weight_kg;
+
+      // Effective CBM: edited header_cbm > items sum > header_cbm > total_cbm
+      let cbm = 0;
+      if (headerCbmEdited !== undefined && headerCbmEdited !== '') cbm = Number(headerCbmEdited);
+      else if (itemsCbm > 0) cbm = itemsCbm;
+      else cbm = Number(pl.header_cbm || pl.total_cbm || 0);
+
+      // Effective weight
+      let weight = 0;
+      if (grossWeightEdited !== undefined && grossWeightEdited !== '') weight = Number(grossWeightEdited);
+      else if (Number(pl.gross_weight_kg || 0) > 0) weight = Number(pl.gross_weight_kg);
+      else if (itemsWeight > 0) weight = itemsWeight;
+      else weight = Number(pl.total_weight || 0);
+
+      const amount = itemsAmount > 0 ? itemsAmount : Number(pl.total_amount || 0);
+      const parcelCount = Number(pl.parcel_count || 0);
+
+      return { pl, items, cbm, weight, amount, parcelCount };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [packingLists, itemUpdates, plUpdates]);
+
+  const pricePerCbmNum = Number(globalPricePerCbm) || 0;
+
+  // Live totals
   const totals = useMemo(() => {
-    let totalCbm = 0;
-    let totalWeight = 0;
-    let totalAmount = 0;
-    let totalShipping = 0;
-    let totalFees = 0;
-
-    packingLists.forEach(pl => {
-      totalFees += Number(pl.additional_fees || 0);
-    });
-
-    allItems.forEach(item => {
-      const updates = itemUpdates[item.id] || {};
-      const cbm = updates.cbm !== undefined ? Number(updates.cbm) : Number(item.cbm || 0);
-      const price = updates.price !== undefined ? Number(updates.price) : Number(item.price || 0);
-      const quantity = Number(item.quantity || 1);
-
-      totalCbm += cbm * quantity;
-      totalAmount += price * quantity;
-      totalWeight += Number(item.weight || 0) * quantity;
-    });
-
-    // Calculate shipping cost based on updated CBM and packing list price_per_cbm
-    packingLists.forEach(pl => {
-      const plPricePerCbm = Number(pl.price_per_cbm || 0);
-      // Calculate this packing list's portion of total CBM
-      const plItems = allItems.filter(item => item.packingListId === pl.id);
-      let plCbm = 0;
-      plItems.forEach(item => {
-        const updates = itemUpdates[item.id] || {};
-        const cbm = updates.cbm !== undefined ? Number(updates.cbm) : Number(item.cbm || 0);
-        const quantity = Number(item.quantity || 1);
-        plCbm += cbm * quantity;
-      });
-      totalShipping += plCbm * plPricePerCbm;
-    });
-
+    const totalCbm = plRows.reduce((s, r) => s + r.cbm, 0);
+    const totalWeight = plRows.reduce((s, r) => s + r.weight, 0);
+    const totalAmount = plRows.reduce((s, r) => s + r.amount, 0);
+    const totalParcels = plRows.reduce((s, r) => s + r.parcelCount, 0);
+    const totalShipping = totalCbm * pricePerCbmNum;
     const auxiliaryTotal = auxiliaryFees.reduce((sum, fee) => sum + Number(fee.amount || 0), 0);
-    const grandTotal = totalAmount + totalShipping + totalFees + auxiliaryTotal;
+    const grandTotal = totalAmount + totalShipping + auxiliaryTotal;
 
-    return { totalCbm, totalWeight, totalAmount, totalShipping, totalFees, auxiliaryTotal, grandTotal };
-  }, [packingLists, allItems, itemUpdates, auxiliaryFees]);
+    return { totalCbm, totalWeight, totalAmount, totalParcels, totalShipping, auxiliaryTotal, grandTotal };
+  }, [plRows, pricePerCbmNum, auxiliaryFees]);
 
   const updateItem = (itemId, field, value) => {
-    // Basic validation
-    if (field === 'cbm' || field === 'price') {
-      const numValue = parseFloat(value);
-      if (isNaN(numValue) || numValue < 0) {
-        return; // Don't update with invalid values
-      }
-      value = numValue;
+    if (field === 'cbm' || field === 'unit_price') {
+      if (value !== '' && (isNaN(parseFloat(value)) || parseFloat(value) < 0)) return;
     }
-
     setItemUpdates(prev => ({
       ...prev,
-      [itemId]: {
-        ...prev[itemId],
-        [field]: value,
-      },
+      [itemId]: { ...prev[itemId], [field]: value },
+    }));
+  };
+
+  const updatePl = (plId, field, value) => {
+    if (field === 'header_cbm' || field === 'gross_weight_kg') {
+      if (value !== '' && (isNaN(parseFloat(value)) || parseFloat(value) < 0)) return;
+    }
+    setPlUpdates(prev => ({
+      ...prev,
+      [plId]: { ...prev[plId], [field]: value },
     }));
   };
 
   const addAuxiliaryFee = () => {
-    setAuxiliaryFees(prev => [...prev, { description: '', amount: 0 }]);
+    setAuxiliaryFees(prev => [...prev, { description: '', amount: '' }]);
   };
 
   const updateAuxiliaryFee = (index, field, value) => {
     if (field === 'amount') {
-      const numValue = parseFloat(value);
-      if (isNaN(numValue) || numValue < 0) {
-        return; // Don't update with invalid values
-      }
-      value = numValue;
+      if (value !== '' && (isNaN(parseFloat(value)) || parseFloat(value) < 0)) return;
     }
-
-    setAuxiliaryFees(prev => prev.map((fee, i) => 
+    setAuxiliaryFees(prev => prev.map((fee, i) =>
       i === index ? { ...fee, [field]: value } : fee
     ));
   };
@@ -1477,112 +1526,234 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
   ];
 
   return (
-    <Modal isOpen onClose={onClose} title={t('packing_list.create_shipment_selected')} size="lg">
+    <Modal isOpen onClose={onClose} title={t('packing_list.create_shipment_selected')} size="xl">
       <div className="space-y-4">
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-          <p className="text-sm text-blue-800 font-medium mb-2">{t('packing_list.selected_items_summary')}</p>
+        {/* Summary section with global price-per-CBM */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
+          <p className="text-sm text-blue-800 font-medium">{t('packing_list.selected_items_summary')}</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
             <div><span className="text-gray-500">{t('packing_list.lists')}:</span> <span className="font-medium">{packingLists.length}</span></div>
-            <div><span className="text-gray-500">{t('packing_list.items_count')}:</span> <span className="font-medium">{allItems.length}</span></div>
+            <div><span className="text-gray-500">{t('packing_list.parcel_count')}:</span> <span className="font-medium">{totals.totalParcels}</span></div>
             <div><span className="text-gray-500">{t('packing_list.total_cbm')}:</span> <span className="font-medium">{totals.totalCbm.toFixed(4)} m³</span></div>
             <div><span className="text-gray-500">{t('packing_list.total_weight')}:</span> <span className="font-medium">{totals.totalWeight.toFixed(2)} kg</span></div>
           </div>
-          <div className="mt-2 pt-2 border-t border-blue-200 grid grid-cols-3 gap-2 text-xs">
+
+          <div className="pt-2 border-t border-blue-200">
+            <label className="text-xs text-gray-600 font-medium block mb-1">
+              {t('packing_list.price_per_cbm')} ($)
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={globalPricePerCbm}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === '' || (parseFloat(v) >= 0 && !isNaN(parseFloat(v)))) {
+                    setGlobalPricePerCbm(v);
+                  }
+                }}
+                placeholder="0.00"
+                className="w-32 px-2 py-1 border rounded text-sm text-right bg-white"
+              />
+              <span className="text-xs text-gray-500">
+                × {totals.totalCbm.toFixed(4)} CBM = <span className="font-semibold text-blue-700">{formatMoney(totals.totalShipping)}</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-blue-200 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
             <div><span className="text-gray-500">{t('packing_list.total_amount')}:</span> <span className="font-medium">{formatMoney(totals.totalAmount)}</span></div>
             <div><span className="text-gray-500">{t('packing_list.shipping_cost')}:</span> <span className="font-medium">{formatMoney(totals.totalShipping)}</span></div>
-            <div><span className="text-gray-500">{t('packing_list.additional_fees')}:</span> <span className="font-medium">{formatMoney(totals.totalFees)}</span></div>
-          </div>
-          {auxiliaryFees.length > 0 && (
-            <div className="mt-1 text-xs">
-              <span className="text-gray-500">{t('packing_list.auxiliary_fees')}:</span> <span className="font-medium">{formatMoney(totals.auxiliaryTotal)}</span>
-            </div>
-          )}
-          <div className="mt-2 pt-2 border-t border-blue-200 text-xs">
-            <span className="text-gray-500 font-semibold">{t('packing_list.grand_total')}:</span>{' '}
-            <span className="font-bold text-blue-700">{formatMoney(totals.grandTotal)}</span>
+            <div><span className="text-gray-500">{t('packing_list.auxiliary_fees')}:</span> <span className="font-medium">{formatMoney(totals.auxiliaryTotal)}</span></div>
+            <div><span className="text-gray-500 font-semibold">{t('packing_list.grand_total')}:</span> <span className="font-bold text-blue-700">{formatMoney(totals.grandTotal)}</span></div>
           </div>
         </div>
 
-        <div className="border rounded-lg overflow-hidden max-h-64 overflow-y-auto">
-          <table className="w-full text-xs">
-            <thead className="bg-gray-50 sticky top-0">
-              <tr>
-                <th className="px-2 py-1.5 text-left">{t('packing_list.description')}</th>
-                <th className="px-2 py-1.5 text-left">{t('packing_list.packing_list')}</th>
-                <th className="px-2 py-1.5 text-center">{t('packing_list.quantity')}</th>
-                <th className="px-2 py-1.5 text-center">{t('packing_list.weight')}</th>
-                <th className="px-2 py-1.5 text-center">
-                  <div className="flex items-center justify-center gap-1">
-                    <Box className="w-3 h-3" />
-                    {t('packing_list.cbm')}
-                  </div>
-                </th>
-                <th className="px-2 py-1.5 text-center">
-                  <div className="flex items-center justify-center gap-1">
-                    <DollarSign className="w-3 h-3" />
-                    {t('packing_list.price')}
-                  </div>
-                </th>
-                <th className="px-2 py-1.5 text-center">{t('packing_list.total')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {allItems.map(item => {
-                const updates = itemUpdates[item.id] || {};
-                const cbm = updates.cbm !== undefined ? Number(updates.cbm) : Number(item.cbm || 0);
-                const price = updates.price !== undefined ? Number(updates.price) : Number(item.price || 0);
-                const quantity = Number(item.quantity || 1);
-                const weight = Number(item.weight || 0);
-                const itemTotal = price * quantity;
-
-                return (
-                  <tr key={item.id}>
-                    <td className="px-2 py-1.5">
-                      <div className="font-medium max-w-[200px] truncate" title={item.description}>
-                        {item.description}
-                      </div>
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <div className="font-mono text-gray-600">{item.packingListRef}</div>
-                    </td>
-                    <td className="px-2 py-1.5 text-center">{quantity}</td>
-                    <td className="px-2 py-1.5 text-center">{(weight * quantity).toFixed(2)} kg</td>
-                    <td className="px-2 py-1.5 text-center">
-                      <Input
-                        type="number"
-                        step="0.0001"
-                        min="0"
-                        value={cbm}
-                        onChange={(e) => updateItem(item.id, 'cbm', e.target.value)}
-                        className="w-20 h-6 text-xs text-center"
-                      />
-                    </td>
-                    <td className="px-2 py-1.5 text-center">
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={price}
-                        onChange={(e) => updateItem(item.id, 'price', e.target.value)}
-                        className="w-20 h-6 text-xs text-center"
-                      />
-                    </td>
-                    <td className="px-2 py-1.5 text-center font-medium">
-                      {formatMoney(itemTotal)}
+        {/* One-row-per-packing-list table */}
+        <div className="border rounded-lg overflow-hidden">
+          <div className="overflow-x-auto max-h-[440px] overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 sticky top-0 z-10">
+                <tr className="border-b">
+                  <th className="px-2 py-2 text-left">{t('packing_list.description')}</th>
+                  <th className="px-2 py-2 text-center w-16">{t('packing_list.parcel_count')}</th>
+                  <th className="px-2 py-2 text-center w-28">{t('packing_list.weight')} (kg)</th>
+                  <th className="px-2 py-2 text-center w-28">
+                    <div className="flex items-center justify-center gap-1"><Box className="w-3 h-3" />{t('packing_list.cbm')}</div>
+                  </th>
+                  <th className="px-2 py-2 text-right w-36">{t('packing_list.total')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {plRows.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-2 py-6 text-center text-gray-400">—</td>
+                  </tr>
+                )}
+                {plRows.map(({ pl, items, cbm, weight, amount, parcelCount }) => {
+                  const lineFreight = cbm * pricePerCbmNum;
+                  // Note: PL additional_fees has been moved to the auxiliary-fees section,
+                  // so we no longer add it to the per-row total here.
+                  const lineTotal = amount + lineFreight;
+                  return (
+                    <tr key={pl.id} className="hover:bg-gray-50 align-top">
+                      <td className="px-2 py-2">
+                        <div className="text-[11px] flex flex-wrap items-center gap-1.5 mb-1">
+                          <span className="font-semibold text-gray-800">{pl.client?.name || '—'}</span>
+                          <span className="text-gray-400">·</span>
+                          <span className="font-mono text-primary-700">{pl.reference}</span>
+                        </div>
+                        {items.length > 0 ? (
+                          <ul className="text-[11px] text-gray-700 space-y-1">
+                            {items.map((it) => (
+                              <li key={it.id} className="leading-snug">
+                                <span className="font-medium">{it.description || '—'}</span>
+                                <span className="text-gray-500"> · {it.quantity ?? 1} {t('packing_list.qty')}</span>
+                                {Number(it.weight || 0) > 0 && <span className="text-gray-500"> · {Number(it.weight).toFixed(2)} kg</span>}
+                                {Number(it.cbm || 0) > 0 && <span className="text-gray-500"> · {Number(it.cbm).toFixed(4)} CBM</span>}
+                                {Number(it.unit_price || it.price || 0) > 0 && <span className="text-gray-500"> · {formatMoney(it.unit_price ?? it.price)}</span>}
+                                {it.notes && <div className="text-[10px] text-gray-500 italic">📝 {it.notes}</div>}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          pl.notes && <div className="text-[11px] text-gray-600 italic">📝 {pl.notes}</div>
+                        )}
+                        {Number(pl.additional_fees || 0) > 0 && (
+                          <div className="text-[10px] text-amber-700 mt-1 bg-amber-50 inline-block px-1.5 py-0.5 rounded">
+                            ↪ {t('packing_list.additional_fees')}: {formatMoney(pl.additional_fees)}
+                            {pl.fees_description ? ` (${pl.fees_description})` : ''}
+                            <span className="ml-1 text-gray-500">— déplacé en Frais auxiliaires</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 text-center font-mono">{parcelCount}</td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={plUpdates[pl.id]?.gross_weight_kg ?? weight}
+                          onChange={(e) => updatePl(pl.id, 'gross_weight_kg', e.target.value)}
+                          className="w-full px-2 py-1 border rounded text-xs text-right"
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="number"
+                          step="0.0001"
+                          min="0"
+                          value={plUpdates[pl.id]?.header_cbm ?? cbm}
+                          onChange={(e) => updatePl(pl.id, 'header_cbm', e.target.value)}
+                          className="w-full px-2 py-1 border rounded text-xs text-right"
+                        />
+                      </td>
+                      <td className="px-2 py-2 text-right font-mono">
+                        <div className="font-semibold">{formatMoney(lineTotal)}</div>
+                        <div className="text-[10px] text-gray-400 leading-tight">
+                          {amount > 0 && <>{formatMoney(amount)} articles</>}
+                          {pricePerCbmNum > 0 && cbm > 0 && (
+                            <> · +{formatMoney(lineFreight)} fret</>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {plRows.length > 0 && (
+                <tfoot className="bg-gray-50 border-t">
+                  <tr>
+                    <td className="px-2 py-2 text-right text-gray-600 font-medium">{t('packing_list.subtotal')}</td>
+                    <td className="px-2 py-2 text-center font-mono font-semibold">{totals.totalParcels}</td>
+                    <td className="px-2 py-2 text-center font-mono">{totals.totalWeight.toFixed(2)}</td>
+                    <td className="px-2 py-2 text-center font-mono">{totals.totalCbm.toFixed(4)}</td>
+                    <td className="px-2 py-2 text-right font-bold text-blue-700">
+                      {formatMoney(totals.totalAmount + totals.totalShipping)}
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                </tfoot>
+              )}
+            </table>
+          </div>
         </div>
 
+        {/* Optional: per-item drill-down for PLs that have items */}
+        {plRows.some(r => r.items.length > 0) && (
+          <details className="border rounded-lg">
+            <summary className="px-3 py-2 text-xs text-gray-600 cursor-pointer select-none hover:bg-gray-50">
+              {t('packing_list.items')} ({plRows.reduce((s, r) => s + r.items.length, 0)})
+            </summary>
+            <div className="border-t overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-white">
+                  <tr className="border-b">
+                    <th className="px-2 py-2 text-left">{t('packing_list.packing_list')}</th>
+                    <th className="px-2 py-2 text-left">{t('packing_list.description')}</th>
+                    <th className="px-2 py-2 text-center w-14">{t('packing_list.qty')}</th>
+                    <th className="px-2 py-2 text-center w-24">{t('packing_list.cbm')}</th>
+                    <th className="px-2 py-2 text-center w-24">P.U.</th>
+                    <th className="px-2 py-2 text-right w-28">{t('packing_list.total')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {plRows.flatMap(({ pl, items }) =>
+                    items.map(item => {
+                      const unitPrice = Number(getItemField(item, 'unit_price') || 0);
+                      const quantity = Number(item.quantity || 1);
+                      const lineAmount = unitPrice * quantity;
+                      return (
+                        <tr key={item.id} className="hover:bg-gray-50">
+                          <td className="px-2 py-1.5 font-mono text-[10px] text-gray-500">{pl.reference}</td>
+                          <td className="px-2 py-1.5">
+                            <input
+                              type="text"
+                              value={getItemField(item, 'description')}
+                              onChange={(e) => updateItem(item.id, 'description', e.target.value)}
+                              className="w-full px-2 py-1 border rounded text-xs"
+                            />
+                          </td>
+                          <td className="px-2 py-1.5 text-center">{quantity}</td>
+                          <td className="px-2 py-1.5">
+                            <input
+                              type="number"
+                              step="0.0001"
+                              min="0"
+                              value={getItemField(item, 'cbm')}
+                              onChange={(e) => updateItem(item.id, 'cbm', e.target.value)}
+                              className="w-full px-2 py-1 border rounded text-xs text-right"
+                            />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={getItemField(item, 'unit_price')}
+                              onChange={(e) => updateItem(item.id, 'unit_price', e.target.value)}
+                              className="w-full px-2 py-1 border rounded text-xs text-right"
+                            />
+                          </td>
+                          <td className="px-2 py-1.5 text-right font-mono">{formatMoney(lineAmount)}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        )}
+
+        {/* Auxiliary fees */}
         <div className="border rounded-lg p-3">
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-sm font-medium text-gray-900">{t('packing_list.auxiliary_fees')}</h4>
             <Button type="button" size="sm" variant="outline" onClick={addAuxiliaryFee}>
               <Plus className="w-3 h-3 mr-1" />
-              {t('common.add')}
+              + Add
             </Button>
           </div>
           {auxiliaryFees.length === 0 ? (
@@ -1604,7 +1775,7 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
                     placeholder="0.00"
                     value={fee.amount}
                     onChange={(e) => updateAuxiliaryFee(index, 'amount', e.target.value)}
-                    className="w-24 h-8 text-xs text-center"
+                    className="w-24 h-8 text-xs text-right"
                   />
                   <Button
                     type="button"
@@ -1617,6 +1788,9 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
                   </Button>
                 </div>
               ))}
+              <div className="flex justify-end text-xs text-gray-600 pt-1">
+                {t('packing_list.subtotal')}: <span className="ml-2 font-bold text-blue-700">{formatMoney(totals.auxiliaryTotal)}</span>
+              </div>
             </div>
           )}
         </div>
@@ -1680,9 +1854,39 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
           <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
           <Button onClick={() => {
             const formattedItemUpdates = Object.entries(itemUpdates)
-              .filter(([_, updates]) => Object.keys(updates).length > 0)
-              .map(([id, updates]) => ({ id: parseInt(id), ...updates }));
-            onSubmit({ ...form, itemUpdates: formattedItemUpdates, auxiliaryFees });
+              .filter(([, updates]) => Object.keys(updates).length > 0)
+              .map(([id, updates]) => {
+                const out = { id: parseInt(id, 10) };
+                if (updates.description !== undefined) out.description = updates.description;
+                if (updates.cbm !== undefined && updates.cbm !== '') out.cbm = Number(updates.cbm);
+                if (updates.unit_price !== undefined && updates.unit_price !== '') out.unit_price = Number(updates.unit_price);
+                else if (updates.price !== undefined && updates.price !== '') out.unit_price = Number(updates.price);
+                return out;
+              });
+            // Merge: global price-per-CBM applied to every PL, plus any inline header_cbm / weight edits.
+            // PLs whose additional_fees were auto-moved to the aux fees section need to be zeroed
+            // to avoid double-counting on the shipment total.
+            const hasGlobalPrice = globalPricePerCbm !== '' && !isNaN(parseFloat(globalPricePerCbm));
+            const formattedPlUpdates = packingLists
+              .map(pl => {
+                const u = plUpdates[pl.id] || {};
+                const out = { id: parseInt(pl.id, 10) };
+                if (hasGlobalPrice) out.price_per_cbm = Number(globalPricePerCbm);
+                if (u.header_cbm !== undefined && u.header_cbm !== '') out.header_cbm = Number(u.header_cbm);
+                if (u.gross_weight_kg !== undefined && u.gross_weight_kg !== '') out.gross_weight_kg = Number(u.gross_weight_kg);
+                if (Number(pl.additional_fees || 0) > 0) out.additional_fees = 0;
+                return out;
+              })
+              .filter(u => Object.keys(u).length > 1); // keep only entries with at least one real field beyond id
+            const cleanAuxiliaryFees = auxiliaryFees
+              .filter(f => Number(f.amount) > 0 && (f.description || '').trim() !== '')
+              .map(f => ({ description: f.description, amount: Number(f.amount) }));
+            onSubmit({
+              ...form,
+              item_updates: formattedItemUpdates,
+              pl_updates: formattedPlUpdates,
+              auxiliary_fees: cleanAuxiliaryFees,
+            });
           }} disabled={loading}>
             <Truck className="w-4 h-4 mr-2" />
             {loading ? t('common.saving') : t('packing_list.create_shipment')}

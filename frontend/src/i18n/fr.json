@@ -92,7 +92,9 @@
     "packing_list": "Liste de colisage",
     "quantity": "Quantité",
     "weight": "Poids",
-    "unit_price": "Prix unitaire"
+    "unit_price": "Prix unitaire",
+    "photos": "Photos",
+    "no_items": "Aucun article détaillé."
   },
   "landing": {
     "login": "Se connecter",
@@ -630,7 +632,11 @@
     "link_shipment_optional_id": "Optionnel — coller l'ID si liaison directe",
     "auxiliary_fees": "Frais auxiliaires",
     "no_auxiliary_fees": "Aucun frais auxiliaire",
-    "fee_description": "Description du frais"
+    "fee_description": "Description du frais",
+    "quantity": "Quantité",
+    "subtotal": "Sous-total",
+    "price": "Prix",
+    "packing_list": "Liste"
   },
   "flight_tickets": {
     "title": "Billets d'avion",

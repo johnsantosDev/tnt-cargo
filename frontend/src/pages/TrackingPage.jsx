@@ -287,43 +287,177 @@ export default function TrackingPage() {
               </div>
             </div>
 
-            {/* Packing Lists */}
+            {/* Packing Lists — full details table */}
             {packingLists.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
                 <h3 className="font-semibold text-gray-900 mb-6 flex items-center gap-2">
                   <Package className="w-5 h-5 text-primary-600" />
                   {t('tracking.contents')}
                 </h3>
-                <div className="space-y-4">
-                  {packingLists.map((pl, plIndex) => (
-                    <div key={plIndex} className="border border-gray-100 rounded-lg p-4">
-                      <h4 className="font-medium text-gray-900 mb-3">{t('tracking.packing_list')} {pl.reference}</h4>
-                      <div className="space-y-2">
-                        {pl.items.map((item, itemIndex) => (
-                          <div key={itemIndex} className="flex justify-between items-start py-2 border-b border-gray-50 last:border-b-0">
-                            <div className="flex-1">
-                              <p className="font-medium text-gray-900">{item.description}</p>
-                              <div className="flex gap-4 text-sm text-gray-500 mt-1">
-                                <span>{t('tracking.quantity')}: {item.quantity}</span>
-                                {item.weight && <span>{t('tracking.weight')}: {item.weight}kg</span>}
-                                {item.cbm && <span>CBM: {item.cbm}</span>}
-                                {item.unit_price && <span>{t('tracking.unit_price')}: ${item.unit_price}</span>}
-                              </div>
-                              {item.notes && <p className="text-sm text-gray-500 mt-1 italic">{item.notes}</p>}
-                            </div>
-                            {item.total_price && (
-                              <div className="text-right">
-                                <p className="font-medium text-gray-900">${item.total_price}</p>
-                              </div>
+                <div className="space-y-6">
+                  {packingLists.map((pl, plIndex) => {
+                    const items = pl.items || [];
+                    const showCbm = items.some((it) => Number(it.cbm || 0) > 0) || Number(pl.total_cbm || 0) > 0;
+                    const showDims = items.some((it) => Number(it.length || 0) > 0 || Number(it.width || 0) > 0 || Number(it.height || 0) > 0);
+                    const fmtMoney = (v) => (v == null || v === '' ? '-' : `$${Number(v).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`);
+                    return (
+                      <div key={plIndex} className="border border-gray-100 rounded-lg overflow-hidden">
+                        <div className="bg-gray-50 px-4 py-3 flex flex-wrap items-center justify-between gap-2 border-b border-gray-100">
+                          <div className="text-sm">
+                            <span className="font-semibold text-gray-900">{t('tracking.packing_list')}</span>
+                            <span className="font-mono ml-2 text-primary-700">{pl.reference}</span>
+                            {pl.status && (
+                              <span className="ml-2 text-[11px] uppercase tracking-wide text-gray-500">· {pl.status}</span>
                             )}
                           </div>
-                        ))}
+                          <div className="text-xs text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
+                            {Number(pl.parcel_count || 0) > 0 && <span><span className="text-gray-400">Colis:</span> <span className="font-medium">{pl.parcel_count}</span></span>}
+                            {Number(pl.gross_weight_kg || pl.total_weight || 0) > 0 && (
+                              <span><span className="text-gray-400">Poids:</span> <span className="font-medium">{Number(pl.gross_weight_kg || pl.total_weight).toFixed(2)} kg</span></span>
+                            )}
+                            {Number(pl.total_cbm || pl.header_cbm || 0) > 0 && (
+                              <span><span className="text-gray-400">CBM:</span> <span className="font-medium">{Number(pl.total_cbm || pl.header_cbm).toFixed(4)} m³</span></span>
+                            )}
+                            {Number(pl.price_per_cbm || 0) > 0 && (
+                              <span><span className="text-gray-400">$/CBM:</span> <span className="font-medium">{fmtMoney(pl.price_per_cbm)}</span></span>
+                            )}
+                          </div>
+                        </div>
+
+                        {items.length === 0 ? (
+                          <div className="px-4 py-6 text-sm text-center text-gray-400">{t('tracking.no_items') || 'Aucun article détaillé.'}</div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead className="bg-white">
+                                <tr className="border-b border-gray-100 text-left text-xs text-gray-500">
+                                  <th className="px-3 py-2">{t('packing_list.description')}</th>
+                                  <th className="px-3 py-2 text-center w-16">{t('packing_list.qty')}</th>
+                                  <th className="px-3 py-2 text-right w-24">{t('packing_list.weight')}</th>
+                                  {showDims && <th className="px-3 py-2 text-center w-32">{t('packing_list.dimensions') || 'L × l × H'}</th>}
+                                  {showCbm && <th className="px-3 py-2 text-right w-24">{t('packing_list.cbm')}</th>}
+                                  <th className="px-3 py-2 text-right w-28">{t('packing_list.unit_price')}</th>
+                                  <th className="px-3 py-2 text-right w-28">{t('packing_list.total')}</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {items.map((item, i) => {
+                                  const dims = [item.length, item.width, item.height]
+                                    .map((v) => (Number(v || 0) > 0 ? Number(v) : null));
+                                  const dimsLabel = dims.every((v) => v) ? dims.map((v) => v).join(' × ') + ' cm' : '-';
+                                  return (
+                                    <tr key={i} className="align-top hover:bg-gray-50">
+                                      <td className="px-3 py-2">
+                                        <div className="text-gray-900">{item.description || '-'}</div>
+                                        {item.notes && <div className="text-xs text-gray-500 mt-0.5 italic">{item.notes}</div>}
+                                        {item.received_at && (
+                                          <div className="text-[10px] text-gray-400 mt-0.5">
+                                            {t('packing_list.received_at') || 'Reçu'}: {new Date(item.received_at).toLocaleDateString('fr-FR')}
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2 text-center">{item.quantity ?? '-'}</td>
+                                      <td className="px-3 py-2 text-right">{item.weight ? `${Number(item.weight).toFixed(2)} kg` : '-'}</td>
+                                      {showDims && <td className="px-3 py-2 text-center text-xs text-gray-600">{dimsLabel}</td>}
+                                      {showCbm && <td className="px-3 py-2 text-right font-mono">{item.cbm ? Number(item.cbm).toFixed(4) : '-'}</td>}
+                                      <td className="px-3 py-2 text-right">{fmtMoney(item.unit_price)}</td>
+                                      <td className="px-3 py-2 text-right font-medium">{fmtMoney(item.total_price)}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                              <tfoot className="bg-gray-50">
+                                {(() => {
+                                  const colsAfterDesc = 1 + (showDims ? 1 : 0) + (showCbm ? 1 : 0) + 1; // qty, [dims], [cbm], unit_price
+                                  return (
+                                    <>
+                                      <tr className="text-xs">
+                                        <td className="px-3 py-2 text-right text-gray-500 font-medium" colSpan={2}>{t('packing_list.totals') || 'Totaux'}</td>
+                                        <td className="px-3 py-2 text-right font-medium">{Number(pl.total_weight || 0).toFixed(2)} kg</td>
+                                        {showDims && <td />}
+                                        {showCbm && <td className="px-3 py-2 text-right font-mono font-medium">{Number(pl.total_cbm || 0).toFixed(4)}</td>}
+                                        <td />
+                                        <td className="px-3 py-2 text-right font-bold text-gray-900">{fmtMoney(pl.total_amount)}</td>
+                                      </tr>
+                                      {Number(pl.shipping_cost || 0) > 0 && (
+                                        <tr className="text-xs">
+                                          <td className="px-3 py-2 text-right text-gray-500" colSpan={1 + colsAfterDesc}>
+                                            {t('packing_list.shipping_cost')}
+                                          </td>
+                                          <td className="px-3 py-2 text-right text-gray-700">
+                                            {fmtMoney(pl.shipping_cost)}
+                                          </td>
+                                        </tr>
+                                      )}
+                                      {Number(pl.additional_fees || 0) > 0 && (
+                                        <tr className="text-xs bg-amber-50">
+                                          <td className="px-3 py-2 text-right text-amber-700 font-medium" colSpan={1 + colsAfterDesc}>
+                                            {t('packing_list.auxiliary_fees') || 'Frais auxiliaires'}
+                                            {pl.fees_description && <span className="ml-2 text-amber-600 italic">— {pl.fees_description}</span>}
+                                          </td>
+                                          <td className="px-3 py-2 text-right text-amber-700 font-semibold">
+                                            {fmtMoney(pl.additional_fees)}
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </>
+                                  );
+                                })()}
+                              </tfoot>
+                            </table>
+                          </div>
+                        )}
+
+                        {pl.notes && (
+                          <div className="px-4 py-2 text-xs text-gray-500 border-t border-gray-100 bg-gray-50/50">
+                            <span className="font-medium">Notes:</span> {pl.notes}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
+
+            {/* Photos gallery — aggregated across all packing lists, shown at the end */}
+            {(() => {
+              const allPhotos = packingLists.flatMap((pl) =>
+                (pl.photos || []).map((ph) => ({ ...ph, reference: pl.reference }))
+              );
+              if (allPhotos.length === 0) return null;
+              return (
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+                  <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <Package className="w-5 h-5 text-primary-600" />
+                    {t('tracking.photos') || 'Photos'}
+                    <span className="text-xs text-gray-400 font-normal">({allPhotos.length})</span>
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {allPhotos.map((ph) => (
+                      <a
+                        key={ph.id}
+                        href={ph.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block group relative aspect-square overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
+                        title={ph.original_name || ''}
+                      >
+                        <img
+                          src={ph.url}
+                          alt={ph.original_name || `photo-${ph.id}`}
+                          loading="lazy"
+                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                        />
+                        <div className="absolute bottom-0 left-0 right-0 px-2 py-1 text-[10px] text-white bg-black/50 truncate opacity-0 group-hover:opacity-100 transition">
+                          {ph.reference}
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 

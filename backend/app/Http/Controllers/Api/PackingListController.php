@@ -35,7 +35,12 @@ class PackingListController extends Controller
             return true;
         }
 
-        return $request->user()->hasAnyRole(['admin', 'manager']) && $packingList->shipment_id !== null;
+        // Admins and managers can edit items at any stage (draft, finalized, or shipped).
+        if ($request->user()->hasAnyRole(['admin', 'manager'])) {
+            return true;
+        }
+
+        return false;
     }
 
     public function index(Request $request): JsonResponse
@@ -135,7 +140,7 @@ class PackingListController extends Controller
     public function update(Request $request, PackingList $packingList): JsonResponse
     {
         $canEditHeader = $packingList->status === 'draft'
-            || ($request->user()->hasAnyRole(['admin', 'manager']) && $packingList->shipment_id);
+            || $request->user()->hasAnyRole(['admin', 'manager']);
 
         if (!$canEditHeader) {
             return response()->json(['message' => 'Seules les listes brouillon peuvent être modifiées.'], 422);
@@ -410,8 +415,16 @@ class PackingListController extends Controller
             'special_instructions' => 'nullable|string',
             'item_updates' => 'nullable|array',
             'item_updates.*.id' => 'required|integer|exists:packing_list_items,id',
+            'item_updates.*.description' => 'nullable|string|max:255',
             'item_updates.*.cbm' => 'nullable|numeric|min:0|max:999999.9999',
+            'item_updates.*.unit_price' => 'nullable|numeric|min:0|max:999999.99',
             'item_updates.*.price' => 'nullable|numeric|min:0|max:999999.99',
+            'pl_updates' => 'nullable|array',
+            'pl_updates.*.id' => 'required|integer|exists:packing_lists,id',
+            'pl_updates.*.price_per_cbm' => 'nullable|numeric|min:0|max:999999.99',
+            'pl_updates.*.additional_fees' => 'nullable|numeric|min:0|max:999999.99',
+            'pl_updates.*.header_cbm' => 'nullable|numeric|min:0|max:999999.9999',
+            'pl_updates.*.gross_weight_kg' => 'nullable|numeric|min:0|max:999999.99',
             'auxiliary_fees' => 'nullable|array',
             'auxiliary_fees.*.description' => 'required|string|max:255',
             'auxiliary_fees.*.amount' => 'required|numeric|min:0|max:999999.99',
@@ -420,6 +433,31 @@ class PackingListController extends Controller
         try {
             return DB::transaction(function () use ($request, $validated, $packingList) {
                 $packingList->load('items');
+
+                // Apply per-list updates — limited to this PL
+                if (!empty($validated['pl_updates'])) {
+                    foreach ($validated['pl_updates'] as $plUpdate) {
+                        if ((int) $plUpdate['id'] !== (int) $packingList->id) {
+                            continue; // ignore foreign PL ids
+                        }
+                        $patch = [];
+                        if (array_key_exists('price_per_cbm', $plUpdate) && $plUpdate['price_per_cbm'] !== null) {
+                            $patch['price_per_cbm'] = (float) $plUpdate['price_per_cbm'];
+                        }
+                        if (array_key_exists('additional_fees', $plUpdate) && $plUpdate['additional_fees'] !== null) {
+                            $patch['additional_fees'] = (float) $plUpdate['additional_fees'];
+                        }
+                        if (array_key_exists('header_cbm', $plUpdate) && $plUpdate['header_cbm'] !== null) {
+                            $patch['header_cbm'] = (float) $plUpdate['header_cbm'];
+                        }
+                        if (array_key_exists('gross_weight_kg', $plUpdate) && $plUpdate['gross_weight_kg'] !== null) {
+                            $patch['gross_weight_kg'] = (float) $plUpdate['gross_weight_kg'];
+                        }
+                        if (!empty($patch)) {
+                            $packingList->update($patch);
+                        }
+                    }
+                }
 
                 // Apply item updates if provided
                 if (!empty($validated['item_updates'])) {
@@ -431,21 +469,27 @@ class PackingListController extends Controller
                         }
 
                         $updates = [];
-                        if (isset($update['cbm']) && $update['cbm'] !== null) {
+                        if (array_key_exists('description', $update) && $update['description'] !== null) {
+                            $updates['description'] = (string) $update['description'];
+                        }
+                        if (array_key_exists('cbm', $update) && $update['cbm'] !== null) {
                             $updates['cbm'] = (float) $update['cbm'];
                         }
-                        if (isset($update['price']) && $update['price'] !== null) {
-                            $updates['price'] = (float) $update['price'];
+                        // Accept both `unit_price` (preferred) and `price` (legacy) from the client
+                        if (array_key_exists('unit_price', $update) && $update['unit_price'] !== null) {
+                            $updates['unit_price'] = (float) $update['unit_price'];
+                        } elseif (array_key_exists('price', $update) && $update['price'] !== null) {
+                            $updates['unit_price'] = (float) $update['price'];
                         }
                         if (!empty($updates)) {
                             $item->update($updates);
                         }
                     }
-
-                    // Recalculate packing list totals
-                    $packingList->recalculateTotals();
-                    $packingList->refresh();
                 }
+
+                // Always recompute PL totals (price_per_cbm or items may have changed)
+                $packingList->recalculateTotals();
+                $packingList->refresh()->load('items');
 
                 $itemDescriptions = $packingList->items->pluck('description')->implode(', ');
                 $description = mb_substr($itemDescriptions, 0, 500);
@@ -463,7 +507,7 @@ class PackingListController extends Controller
                     $grandTotal += $auxiliaryFeesTotal;
                 }
 
-                $statusId = ShipmentStatus::resolveDefaultStatusId();
+                $statusId = ShipmentStatus::resolveInitialShipmentStatusId();
                 if (!$statusId) {
                     return response()->json([
                         'message' => 'Aucun statut d\'expédition n\'est configuré. Créez un statut d\'expédition avant de créer une expédition.'
@@ -482,7 +526,7 @@ class PackingListController extends Controller
                     'volume' => $packingList->total_cbm,
                     'quantity' => $packingList->items->sum('quantity'),
                     'shipping_cost' => $totalShippingCost,
-                    'additional_fees' => $totalAdditionalFees + $auxiliaryFeesTotal,
+                    'other_fees' => $auxiliaryFeesTotal,
                     'total_cost' => $grandTotal,
                     'balance_due' => $grandTotal,
                     'status_id' => $statusId,
@@ -557,7 +601,7 @@ class PackingListController extends Controller
         $itemDescriptions = $items->pluck('description')->implode(', ');
         $description = mb_substr($itemDescriptions, 0, 500);
 
-        $statusId = ShipmentStatus::resolveDefaultStatusId();
+        $statusId = ShipmentStatus::resolveInitialShipmentStatusId();
         if (!$statusId) {
             return response()->json([
                 'message' => 'Aucun statut d\'expédition n\'est configuré. Créez un statut d\'expédition avant de créer une expédition.'
@@ -622,8 +666,16 @@ class PackingListController extends Controller
             'special_instructions' => 'nullable|string',
             'item_updates' => 'nullable|array',
             'item_updates.*.id' => 'required|integer|exists:packing_list_items,id',
+            'item_updates.*.description' => 'nullable|string|max:255',
             'item_updates.*.cbm' => 'nullable|numeric|min:0|max:999999.9999',
+            'item_updates.*.unit_price' => 'nullable|numeric|min:0|max:999999.99',
             'item_updates.*.price' => 'nullable|numeric|min:0|max:999999.99',
+            'pl_updates' => 'nullable|array',
+            'pl_updates.*.id' => 'required|integer|exists:packing_lists,id',
+            'pl_updates.*.price_per_cbm' => 'nullable|numeric|min:0|max:999999.99',
+            'pl_updates.*.additional_fees' => 'nullable|numeric|min:0|max:999999.99',
+            'pl_updates.*.header_cbm' => 'nullable|numeric|min:0|max:999999.9999',
+            'pl_updates.*.gross_weight_kg' => 'nullable|numeric|min:0|max:999999.99',
             'auxiliary_fees' => 'nullable|array',
             'auxiliary_fees.*.description' => 'required|string|max:255',
             'auxiliary_fees.*.amount' => 'required|numeric|min:0|max:999999.99',
@@ -651,6 +703,36 @@ class PackingListController extends Controller
                     return response()->json(['message' => 'Certaines listes sont déjà liées à une expédition: ' . $alreadyShipped->pluck('reference')->implode(', ')], 422);
                 }
 
+                $allowedPlIds = $packingLists->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+                // Apply per-list updates
+                if (!empty($validated['pl_updates'])) {
+                    foreach ($validated['pl_updates'] as $plUpdate) {
+                        if (!in_array((int) $plUpdate['id'], $allowedPlIds, true)) {
+                            return response()->json(['message' => 'Tentative de modification d\'une liste non autorisée.'], 403);
+                        }
+                        $pl = $packingLists->firstWhere('id', $plUpdate['id']);
+                        if (!$pl) continue;
+
+                        $patch = [];
+                        if (array_key_exists('price_per_cbm', $plUpdate) && $plUpdate['price_per_cbm'] !== null) {
+                            $patch['price_per_cbm'] = (float) $plUpdate['price_per_cbm'];
+                        }
+                        if (array_key_exists('additional_fees', $plUpdate) && $plUpdate['additional_fees'] !== null) {
+                            $patch['additional_fees'] = (float) $plUpdate['additional_fees'];
+                        }
+                        if (array_key_exists('header_cbm', $plUpdate) && $plUpdate['header_cbm'] !== null) {
+                            $patch['header_cbm'] = (float) $plUpdate['header_cbm'];
+                        }
+                        if (array_key_exists('gross_weight_kg', $plUpdate) && $plUpdate['gross_weight_kg'] !== null) {
+                            $patch['gross_weight_kg'] = (float) $plUpdate['gross_weight_kg'];
+                        }
+                        if (!empty($patch)) {
+                            $pl->update($patch);
+                        }
+                    }
+                }
+
                 // Get all item IDs from selected packing lists for security validation
                 $allowedItemIds = $packingLists->flatMap(fn($pl) => $pl->items->pluck('id'))->unique()->toArray();
 
@@ -665,28 +747,33 @@ class PackingListController extends Controller
                         $item = PackingListItem::find($update['id']);
                         if ($item) {
                             $updates = [];
-                            if (isset($update['cbm']) && $update['cbm'] !== null) {
+                            if (array_key_exists('description', $update) && $update['description'] !== null) {
+                                $updates['description'] = (string) $update['description'];
+                            }
+                            if (array_key_exists('cbm', $update) && $update['cbm'] !== null) {
                                 $updates['cbm'] = (float) $update['cbm'];
                             }
-                            if (isset($update['price']) && $update['price'] !== null) {
-                                $updates['price'] = (float) $update['price'];
+                            if (array_key_exists('unit_price', $update) && $update['unit_price'] !== null) {
+                                $updates['unit_price'] = (float) $update['unit_price'];
+                            } elseif (array_key_exists('price', $update) && $update['price'] !== null) {
+                                $updates['unit_price'] = (float) $update['price'];
                             }
                             if (!empty($updates)) {
                                 $item->update($updates);
                             }
                         }
                     }
-
-                    // Recalculate totals for affected packing lists
-                    foreach ($packingLists as $pl) {
-                        $pl->recalculateTotals();
-                    }
-
-                    // Refresh packing lists with updated data
-                    $packingLists = PackingList::with('items')
-                        ->whereIn('id', $validated['packing_list_ids'])
-                        ->get();
                 }
+
+                // Recalculate totals for all selected packing lists (covers both pl_updates and item_updates)
+                foreach ($packingLists as $pl) {
+                    $pl->recalculateTotals();
+                }
+
+                // Refresh packing lists with updated data
+                $packingLists = PackingList::with('items')
+                    ->whereIn('id', $validated['packing_list_ids'])
+                    ->get();
 
                 $totalCbm = $packingLists->sum('total_cbm');
                 $totalWeight = $packingLists->sum('total_weight');
@@ -707,7 +794,7 @@ class PackingListController extends Controller
                     $grandTotal += $auxiliaryFeesTotal;
                 }
 
-                $statusId = ShipmentStatus::resolveDefaultStatusId();
+                $statusId = ShipmentStatus::resolveInitialShipmentStatusId();
                 if (!$statusId) {
                     return response()->json([
                         'message' => 'Aucun statut d\'expédition n\'est configuré. Créez un statut d\'expédition avant de créer une expédition.'
@@ -726,7 +813,7 @@ class PackingListController extends Controller
                     'volume' => $totalCbm,
                     'quantity' => $totalQty,
                     'shipping_cost' => $totalShippingCost,
-                    'additional_fees' => $totalAdditionalFees + $auxiliaryFeesTotal,
+                    'other_fees' => $auxiliaryFeesTotal,
                     'total_cost' => $grandTotal,
                     'balance_due' => $grandTotal,
                     'status_id' => $statusId,

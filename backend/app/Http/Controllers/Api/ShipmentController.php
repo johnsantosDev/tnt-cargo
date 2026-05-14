@@ -85,7 +85,7 @@ class ShipmentController extends Controller
         ]);
 
         $validated['tracking_number'] = Shipment::generateTrackingNumber();
-        $validated['status_id'] = ShipmentStatus::resolveDefaultStatusId();
+        $validated['status_id'] = ShipmentStatus::resolveInitialShipmentStatusId();
         $validated['created_by'] = $request->user()->id;
         $validated['destination'] = $validated['destination'] ?? 'Goma';
         $validated['region'] = RegionContext::resolveWriteRegion($request);
@@ -327,58 +327,72 @@ class ShipmentController extends Controller
     public function track(string $trackingNumber): JsonResponse
     {
         $shipment = Shipment::where('tracking_number', $trackingNumber)
-            ->with(['status', 'history.status', 'client:id,name', 'packingLists.items'])
+            ->with(['status', 'history.status', 'client:id,name', 'packingLists.items', 'packingLists.photos'])
             ->firstOrFail();
 
-        $allStatuses = ShipmentStatus::where('is_active', true)->orderBy('order')->get();
-
-        return response()->json([
-            'shipment' => [
-                'tracking_number' => $shipment->tracking_number,
-                'client_name' => $shipment->client->name,
-                'origin' => $shipment->origin,
-                'destination' => $shipment->destination,
-                'description' => $shipment->description,
-                'current_status' => $shipment->status,
-                'estimated_arrival' => $shipment->estimated_arrival,
-                'actual_arrival' => $shipment->actual_arrival,
-                'created_at' => $shipment->created_at,
-                'packing_lists' => $shipment->packingLists->map(fn($pl) => [
-                    'reference' => $pl->reference,
-                    'items' => $pl->items->map(fn($item) => [
-                        'description' => $item->description,
-                        'quantity' => $item->quantity,
-                        'weight' => $item->weight,
-                        'cbm' => $item->cbm,
-                        'unit_price' => $item->unit_price,
-                        'total_price' => $item->total_price,
-                        'notes' => $item->notes,
-                    ]),
-                ]),
-            ],
-            'timeline' => $shipment->history->map(fn($h) => [
-                'status' => $h->status->name,
-                'color' => $h->status->color,
-                'comment' => $h->comment,
-                'location' => $h->location,
-                'date' => $h->created_at,
-            ]),
-            'all_statuses' => $allStatuses,
-        ]);
+        return response()->json($this->buildTrackResponse($shipment, 'tracking_number'));
     }
 
     public function trackByShareToken(string $shareToken): JsonResponse
     {
         $shipment = Shipment::where('share_token', $shareToken)
-            ->with(['status', 'history.status', 'client:id,name', 'packingLists.items'])
+            ->with(['status', 'history.status', 'client:id,name', 'packingLists.items', 'packingLists.photos'])
             ->firstOrFail();
 
-        $allStatuses = ShipmentStatus::where('is_active', true)->orderBy('order')->get();
+        return response()->json($this->buildTrackResponse($shipment, 'share_token'));
+    }
 
-        return response()->json([
+    /**
+     * Public photo accessor (no auth) — validated against the share token so
+     * only photos belonging to the tracked shipment are reachable.
+     */
+    public function trackPhotoByShareToken(string $shareToken, \App\Models\PackingListPhoto $photo)
+    {
+        $shipment = Shipment::where('share_token', $shareToken)->firstOrFail();
+        return $this->servePackingListPhoto($shipment, $photo);
+    }
+
+    /**
+     * Public photo accessor (no auth) — gated by the shipment tracking number.
+     */
+    public function trackPhotoByTrackingNumber(string $trackingNumber, \App\Models\PackingListPhoto $photo)
+    {
+        $shipment = Shipment::where('tracking_number', $trackingNumber)->firstOrFail();
+        return $this->servePackingListPhoto($shipment, $photo);
+    }
+
+    protected function servePackingListPhoto(Shipment $shipment, \App\Models\PackingListPhoto $photo)
+    {
+        $belongs = \App\Models\PackingList::where('id', $photo->packing_list_id)
+            ->where('shipment_id', $shipment->id)
+            ->exists();
+        if (!$belongs) {
+            return response()->json(['message' => 'Photo introuvable.'], 404);
+        }
+        $path = Storage::disk('local')->path($photo->file_path);
+        if (!is_readable($path)) {
+            return response()->json(['message' => 'Fichier introuvable.'], 404);
+        }
+        return response()->file($path);
+    }
+
+    /**
+     * Shared response shape for the public tracking endpoints. Returns the full
+     * packing-list breakdown so the tracking UI can render a detailed item table.
+     * $accessor is either 'share_token' or 'tracking_number' — determines which
+     * public route is used to build photo URLs.
+     */
+    protected function buildTrackResponse(Shipment $shipment, string $accessor = 'share_token'): array
+    {
+        $allStatuses = ShipmentStatus::where('is_active', true)->orderBy('order')->get();
+        $photoBase = $accessor === 'tracking_number'
+            ? '/api/track/' . urlencode($shipment->tracking_number) . '/photos/'
+            : '/api/track/share/' . urlencode($shipment->share_token ?? '') . '/photos/';
+
+        return [
             'shipment' => [
                 'tracking_number' => $shipment->tracking_number,
-                'client_name' => $shipment->client->name,
+                'client_name' => $shipment->client->name ?? null,
                 'origin' => $shipment->origin,
                 'destination' => $shipment->destination,
                 'description' => $shipment->description,
@@ -386,16 +400,47 @@ class ShipmentController extends Controller
                 'estimated_arrival' => $shipment->estimated_arrival,
                 'actual_arrival' => $shipment->actual_arrival,
                 'created_at' => $shipment->created_at,
+                'weight' => $shipment->weight,
+                'volume' => $shipment->volume,
+                'quantity' => $shipment->quantity,
+                'shipping_cost' => $shipment->shipping_cost,
+                'other_fees' => $shipment->other_fees,
+                'total_cost' => $shipment->total_cost,
+                'package_type' => $shipment->package_type,
+                'container_code' => $shipment->container_code,
                 'packing_lists' => $shipment->packingLists->map(fn($pl) => [
+                    'id' => $pl->id,
                     'reference' => $pl->reference,
+                    'status' => $pl->status,
+                    'parcel_count' => $pl->parcel_count,
+                    'gross_weight_kg' => $pl->gross_weight_kg,
+                    'header_cbm' => $pl->header_cbm,
+                    'total_cbm' => $pl->total_cbm,
+                    'total_weight' => $pl->total_weight,
+                    'total_amount' => $pl->total_amount,
+                    'price_per_cbm' => $pl->price_per_cbm,
+                    'shipping_cost' => $pl->shipping_cost,
+                    'additional_fees' => $pl->additional_fees,
+                    'fees_description' => $pl->fees_description,
+                    'notes' => $pl->notes,
                     'items' => $pl->items->map(fn($item) => [
+                        'id' => $item->id,
                         'description' => $item->description,
                         'quantity' => $item->quantity,
                         'weight' => $item->weight,
+                        'length' => $item->length,
+                        'width' => $item->width,
+                        'height' => $item->height,
                         'cbm' => $item->cbm,
                         'unit_price' => $item->unit_price,
                         'total_price' => $item->total_price,
                         'notes' => $item->notes,
+                        'received_at' => $item->received_at,
+                    ]),
+                    'photos' => $pl->photos->map(fn($photo) => [
+                        'id' => $photo->id,
+                        'original_name' => $photo->original_name,
+                        'url' => $photoBase . $photo->id,
                     ]),
                 ]),
             ],
@@ -407,6 +452,6 @@ class ShipmentController extends Controller
                 'date' => $h->created_at,
             ]),
             'all_statuses' => $allStatuses,
-        ]);
+        ];
     }
 }

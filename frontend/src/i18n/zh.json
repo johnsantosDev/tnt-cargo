@@ -418,7 +418,14 @@
     "arrival": "到达",
     "delivery": "交付",
     "enter_number": "请输入追踪号",
-    "enter_number_desc": "输入您的TNT追踪号以实时追踪包裹。"
+    "enter_number_desc": "输入您的TNT追踪号以实时追踪包裹。",
+    "contents": "货物内容",
+    "packing_list": "装箱单",
+    "quantity": "数量",
+    "weight": "重量",
+    "unit_price": "单价",
+    "photos": "照片",
+    "no_items": "暂无物品明细。"
   },
   "landing": {
     "login": "登录",
@@ -569,7 +576,14 @@
     "create_shipment_selected": "从选中项创建货运",
     "selected_items_summary": "选择摘要",
     "items_will_be_removed": "这些项目将从装箱单中移除并添加到新货运中。",
-    "lists": "列表"
+    "lists": "列表",
+    "auxiliary_fees": "附加费用",
+    "no_auxiliary_fees": "无附加费用",
+    "fee_description": "费用描述",
+    "quantity": "数量",
+    "subtotal": "小计",
+    "price": "价格",
+    "packing_list": "装箱单"
   },
   "flight_tickets": {
     "title": "机票",

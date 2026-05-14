@@ -1,8 +1,8 @@
 
-
 deployment:
 -npm run build
 -zip the content of dist and deploy 
+
 
 
 jetro
