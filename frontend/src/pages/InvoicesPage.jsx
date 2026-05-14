@@ -42,7 +42,19 @@ export default function InvoicesPage() {
   const handleDownload = async (id) => {
     try {
       const response = await api.get(`/invoices/${id}/pdf`, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+
+      // Some backends return a JSON error with status 200 if a renderer fails;
+      // detect that by sniffing the blob content-type.
+      const ct = response.data?.type || '';
+      if (ct.includes('application/json') || ct.includes('text/html')) {
+        const text = await response.data.text();
+        let msg = text;
+        try { msg = JSON.parse(text).message || text; } catch (_) { /* keep raw text */ }
+        toast.error(msg || t('common.error'));
+        return;
+      }
+
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `facture-${id}.pdf`);
@@ -51,7 +63,17 @@ export default function InvoicesPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      toast.error(t('common.error'));
+      // Axios returns the body as a Blob when responseType is 'blob'; convert it to read the server message.
+      let msg = err.response?.data;
+      if (msg instanceof Blob) {
+        try {
+          const text = await msg.text();
+          try { msg = JSON.parse(text).message || text; } catch (_) { msg = text; }
+        } catch (_) { msg = null; }
+      } else if (msg && typeof msg === 'object') {
+        msg = msg.message;
+      }
+      toast.error(msg || t('common.error'));
     }
   };
 

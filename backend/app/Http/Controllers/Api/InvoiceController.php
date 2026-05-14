@@ -285,11 +285,34 @@ class InvoiceController extends Controller
 
     public function downloadPdf(Invoice $invoice)
     {
-        $invoice->load(['client', 'items', 'shipment', 'cashAdvance']);
-        $pdf = Pdf::loadView('invoices.pdf', compact('invoice'));
-        $clientName = str_replace(' ', '_', $invoice->client->name ?? 'client');
-        $timestamp = now()->format('dmYHis');
-        return $pdf->download("facture-{$clientName}-{$invoice->invoice_number}-{$timestamp}.pdf");
+        try {
+            // Always-required relations
+            $invoice->load(['client', 'items', 'shipment']);
+
+            // cashAdvance is from a newer migration; if it isn't deployed yet, $invoice doesn't
+            // have a cash_advance_id column and eager-loading the relation throws. Best-effort load.
+            try {
+                $invoice->load('cashAdvance');
+            } catch (\Throwable $e) {
+                \Log::warning('Invoice PDF: cashAdvance relation skipped', ['invoice_id' => $invoice->id, 'error' => $e->getMessage()]);
+                $invoice->setRelation('cashAdvance', null);
+            }
+
+            $pdf = Pdf::loadView('invoices.pdf', compact('invoice'));
+            $clientName = str_replace(' ', '_', $invoice->client->name ?? 'client');
+            $timestamp = now()->format('dmYHis');
+            return $pdf->download("facture-{$clientName}-{$invoice->invoice_number}-{$timestamp}.pdf");
+        } catch (\Throwable $e) {
+            \Log::error('Invoice PDF generation failed', [
+                'invoice_id' => $invoice->id,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            return response()->json([
+                'message' => 'Impossible de générer le PDF de la facture: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function destroy(Request $request, Invoice $invoice): JsonResponse

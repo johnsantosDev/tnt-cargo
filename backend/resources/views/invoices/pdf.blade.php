@@ -89,13 +89,13 @@
                     <td class="info-label">N° Facture</td>
                     <td class="info-value">{{ $invoice->invoice_number }}</td>
                     <td class="info-label">Date d'émission</td>
-                    <td class="info-value">{{ $invoice->issue_date->format('d/m/Y') }}</td>
+                    <td class="info-value">{{ $invoice->issue_date ? \Carbon\Carbon::parse($invoice->issue_date)->format('d/m/Y') : '-' }}</td>
                 </tr>
                 <tr>
                     <td class="info-label">Devise</td>
                     <td class="info-value">{{ $invoice->currency }}</td>
                     <td class="info-label">Date d'échéance</td>
-                    <td class="info-value">{{ $invoice->due_date->format('d/m/Y') }}</td>
+                    <td class="info-value">{{ $invoice->due_date ? \Carbon\Carbon::parse($invoice->due_date)->format('d/m/Y') : '-' }}</td>
                 </tr>
                 @if($invoice->shipment)
                 <tr>
@@ -108,7 +108,7 @@
                 @if($invoice->paid_date)
                 <tr>
                     <td class="info-label">Date de paiement</td>
-                    <td class="info-value">{{ $invoice->paid_date->format('d/m/Y') }}</td>
+                    <td class="info-value">{{ \Carbon\Carbon::parse($invoice->paid_date)->format('d/m/Y') }}</td>
                     <td></td><td></td>
                 </tr>
                 @endif
@@ -122,21 +122,21 @@
                     <td>
                         <div class="label">Facturé à</div>
                         <div class="value">
-                            <strong>{{ $invoice->client->name }}</strong><br>
-                            @if($invoice->client->company){{ $invoice->client->company }}<br>@endif
-                            @if($invoice->client->address){{ $invoice->client->address }}<br>@endif
-                            @if($invoice->client->email){{ $invoice->client->email }}<br>@endif
-                            @if($invoice->client->phone){{ $invoice->client->phone }}@endif
+                            <strong>{{ optional($invoice->client)->name ?? '-' }}</strong><br>
+                            @if(optional($invoice->client)->company){{ $invoice->client->company }}<br>@endif
+                            @if(optional($invoice->client)->address){{ $invoice->client->address }}<br>@endif
+                            @if(optional($invoice->client)->email){{ $invoice->client->email }}<br>@endif
+                            @if(optional($invoice->client)->phone){{ $invoice->client->phone }}@endif
                         </div>
                     </td>
                     <td class="text-right">
                         @if($invoice->shipment)
                             <div class="label">Expédition</div>
                             <div class="value">
-                                <strong>{{ $invoice->shipment->tracking_number }}</strong><br>
+                                <strong>{{ $invoice->shipment->tracking_number ?? '-' }}</strong><br>
                                 @if($invoice->shipment->origin){{ $invoice->shipment->origin }} &rarr; {{ $invoice->shipment->destination }}<br>@endif
                                 @if($invoice->shipment->weight)Poids: {{ $invoice->shipment->weight }} kg<br>@endif
-                                @if($invoice->shipment->transport_mode)Mode: {{ ucfirst($invoice->shipment->transport_mode) }}@endif
+                                @if(isset($invoice->shipment->transport_mode) && $invoice->shipment->transport_mode)Mode: {{ ucfirst($invoice->shipment->transport_mode) }}@endif
                             </div>
                         @endif
                     </td>
@@ -156,71 +156,91 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach($invoice->items as $index => $item)
+                @foreach(($invoice->items ?? collect()) as $index => $item)
                 <tr>
                     <td>{{ $index + 1 }}</td>
-                    <td>{{ $item->description }}</td>
-                    <td class="text-right">{{ $item->quantity }}</td>
-                    <td class="text-right">{{ number_format($item->unit_price, 2) }} {{ $invoice->currency }}</td>
-                    <td class="text-right">{{ number_format($item->total, 2) }} {{ $invoice->currency }}</td>
+                    <td>{{ $item->description ?? '' }}</td>
+                    <td class="text-right">{{ $item->quantity ?? 0 }}</td>
+                    <td class="text-right">{{ number_format((float) ($item->unit_price ?? 0), 2) }} {{ $invoice->currency }}</td>
+                    <td class="text-right">{{ number_format((float) ($item->total ?? 0), 2) }} {{ $invoice->currency }}</td>
                 </tr>
                 @endforeach
             </tbody>
         </table>
 
         {{-- Totals --}}
+        @php
+            $invSubtotal     = (float) ($invoice->subtotal ?? 0);
+            $invTax          = (float) ($invoice->tax_amount ?? 0);
+            $invDiscount     = (float) ($invoice->discount_amount ?? 0);
+            $invMagerwa      = (float) ($invoice->magerwa_price ?? 0);
+            $invCashAdvAmt   = (float) ($invoice->cash_advance_amount ?? 0);
+            $invTotal        = (float) ($invoice->total ?? 0);
+            $invAmountPaid   = (float) ($invoice->amount_paid ?? 0);
+            // auxiliary_fees may be an array (cast), JSON string, or null depending on schema state
+            $rawAux = $invoice->auxiliary_fees ?? [];
+            if (is_string($rawAux)) {
+                $decoded = json_decode($rawAux, true);
+                $rawAux = is_array($decoded) ? $decoded : [];
+            }
+            $invAuxFees = is_array($rawAux) ? $rawAux : [];
+            // cashAdvance relation can be unloaded or missing in older schemas
+            $invCashAdvRef = null;
+            try { $invCashAdvRef = optional($invoice->cashAdvance)->reference; } catch (\Throwable $e) { $invCashAdvRef = null; }
+        @endphp
         <div class="totals">
             <table>
                 <tr>
                     <td>Sous-total</td>
-                    <td class="text-right">{{ number_format($invoice->subtotal, 2) }} {{ $invoice->currency }}</td>
+                    <td class="text-right">{{ number_format($invSubtotal, 2) }} {{ $invoice->currency }}</td>
                 </tr>
-                @if($invoice->tax_amount > 0)
+                @if($invTax > 0)
                 <tr>
                     <td>Taxes</td>
-                    <td class="text-right">{{ number_format($invoice->tax_amount, 2) }} {{ $invoice->currency }}</td>
+                    <td class="text-right">{{ number_format($invTax, 2) }} {{ $invoice->currency }}</td>
                 </tr>
                 @endif
-                @if($invoice->discount_amount > 0)
+                @if($invDiscount > 0)
                 <tr>
                     <td>Remise</td>
-                    <td class="text-right">-{{ number_format($invoice->discount_amount, 2) }} {{ $invoice->currency }}</td>
+                    <td class="text-right">-{{ number_format($invDiscount, 2) }} {{ $invoice->currency }}</td>
                 </tr>
                 @endif
-                @if(($invoice->magerwa_price ?? 0) > 0)
+                @if($invMagerwa > 0)
                 <tr>
                     <td>Magerwa</td>
-                    <td class="text-right">{{ number_format($invoice->magerwa_price, 2) }} {{ $invoice->currency }}</td>
+                    <td class="text-right">{{ number_format($invMagerwa, 2) }} {{ $invoice->currency }}</td>
                 </tr>
                 @endif
-                @foreach($invoice->auxiliary_fees ?? [] as $fee)
-                @if(($fee['amount'] ?? 0) > 0)
-                <tr>
-                    <td>{{ $fee['label'] ?? 'Frais' }}</td>
-                    <td class="text-right">{{ number_format($fee['amount'], 2) }} {{ $invoice->currency }}</td>
-                </tr>
-                @endif
+                @foreach($invAuxFees as $fee)
+                    @php $feeAmt = (float) (is_array($fee) ? ($fee['amount'] ?? 0) : 0); @endphp
+                    @if($feeAmt > 0)
+                    <tr>
+                        <td>{{ is_array($fee) ? ($fee['label'] ?? 'Frais') : 'Frais' }}</td>
+                        <td class="text-right">{{ number_format($feeAmt, 2) }} {{ $invoice->currency }}</td>
+                    </tr>
+                    @endif
                 @endforeach
-                @if(($invoice->cash_advance_amount ?? 0) > 0)
+                @if($invCashAdvAmt > 0)
                 <tr>
-                    <td>Avance cash @if($invoice->cashAdvance) ({{ $invoice->cashAdvance->reference }}) @endif</td>
-                    <td class="text-right">-{{ number_format($invoice->cash_advance_amount, 2) }} {{ $invoice->currency }}</td>
+                    <td>Avance cash @if($invCashAdvRef) ({{ $invCashAdvRef }}) @endif</td>
+                    <td class="text-right">-{{ number_format($invCashAdvAmt, 2) }} {{ $invoice->currency }}</td>
                 </tr>
                 @endif
                 <tr class="total-row">
                     <td>TOTAL</td>
-                    <td class="text-right">{{ number_format($invoice->total, 2) }} {{ $invoice->currency }}</td>
+                    <td class="text-right">{{ number_format($invTotal, 2) }} {{ $invoice->currency }}</td>
                 </tr>
-                @if($invoice->amount_paid > 0)
+                @if($invAmountPaid > 0)
                 <tr class="paid-row">
                     <td>Montant payé</td>
-                    <td class="text-right">{{ number_format($invoice->amount_paid, 2) }} {{ $invoice->currency }}</td>
+                    <td class="text-right">{{ number_format($invAmountPaid, 2) }} {{ $invoice->currency }}</td>
                 </tr>
                 @endif
-                @if($invoice->total - $invoice->amount_paid > 0)
+                @if(($invTotal - $invAmountPaid) > 0)
                 <tr class="balance-row">
                     <td>Solde dû</td>
-                    <td class="text-right">{{ number_format($invoice->total - $invoice->amount_paid, 2) }} {{ $invoice->currency }}</td>
+                    <td class="text-right">{{ number_format($invTotal - $invAmountPaid, 2) }} {{ $invoice->currency }}</td>
                 </tr>
                 @endif
             </table>

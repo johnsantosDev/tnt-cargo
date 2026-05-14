@@ -376,18 +376,11 @@ export default function TrackingPage() {
                                       {t('packing_list.received_at') || 'Reçu'}: {new Date(r.received_at).toLocaleDateString('fr-FR')}
                                     </div>
                                   )}
-                                  {r.kind === 'pl' && (
-                                    <div className="text-[10px] text-gray-400 mt-0.5 italic">
-                                      Pas d'articles individuels — totaux déclarés au niveau de la liste
-                                    </div>
-                                  )}
                                 </td>
                                 <td className="px-3 py-2 text-center">{r.quantity ?? '-'}</td>
                                 <td className="px-3 py-2 text-right">{Number(r.weight || 0) > 0 ? `${Number(r.weight).toFixed(2)} kg` : '-'}</td>
                                 {showDims && <td className="px-3 py-2 text-center text-xs text-gray-600">{dimsLabel}</td>}
                                 {showCbm && <td className="px-3 py-2 text-right font-mono">{Number(r.cbm || 0) > 0 ? Number(r.cbm).toFixed(4) : '-'}</td>}
-                                <td className="px-3 py-2 text-right">{fmtMoney(r.unit_price)}</td>
-                                <td className="px-3 py-2 text-right font-medium">{fmtMoney(r.total_price)}</td>
                               </tr>
                             );
                           })}
