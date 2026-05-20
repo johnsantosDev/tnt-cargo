@@ -8,7 +8,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8002', //'https://api.agencetntcargo.com' or 'http://localhost:8002' for local development
+        target: 'https://api.agencetntcargo.com', //'https://api.agencetntcargo.com' or 'http://localhost:8002' for local development
         changeOrigin: true,
       },
     },

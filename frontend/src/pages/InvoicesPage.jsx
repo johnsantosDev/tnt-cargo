@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal } from '../components/ui';
-import { Plus, Search, Download, FileText, Eye, MessageCircle, Trash2 } from 'lucide-react';
+import { Plus, Search, Download, FileText, Eye, MessageCircle, Trash2, DollarSign } from 'lucide-react';
 import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
 import { sendViaWhatsApp } from '../utils/export';
 import ExportButtons from '../components/ui/ExportButtons';
@@ -21,6 +21,7 @@ export default function InvoicesPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
+  const [showPay, setShowPay] = useState(null);
   const [whatsappModal, setWhatsappModal] = useState(null);
 
   const fetchInvoices = useCallback(() => {
@@ -123,6 +124,9 @@ export default function InvoicesPage() {
       key: 'actions', label: '', render: (row) => (
         <div className="flex gap-1">
           <button onClick={() => setShowDetail(row)} className="p-1.5 text-gray-400 hover:text-primary-600"><Eye className="w-4 h-4" /></button>
+          {row.status !== 'paid' && row.status !== 'cancelled' && hasPermission('payments.create') && (
+            <button onClick={() => setShowPay(row)} className="p-1.5 text-gray-400 hover:text-green-600" title="Payer cette facture"><DollarSign className="w-4 h-4" /></button>
+          )}
           <button onClick={() => handleDownload(row.id)} className="p-1.5 text-gray-400 hover:text-green-600" title={t('common.download')}><Download className="w-4 h-4" /></button>
           <button
             onClick={() => setWhatsappModal({
@@ -184,6 +188,7 @@ export default function InvoicesPage() {
       </Card>
 
       {showForm && <InvoiceFormModal onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); fetchInvoices(); }} />}
+      {showPay && <InvoicePayModal invoice={showPay} onClose={() => setShowPay(null)} onSaved={() => { setShowPay(null); fetchInvoices(); }} />}
       {showDetail && (
         <InvoiceDetailModal
           invoice={showDetail}
@@ -212,6 +217,15 @@ function InvoiceFormModal({ onClose, onSaved }) {
   const [cashAdvanceId, setCashAdvanceId] = useState('');
   const [cashAdvanceAmount, setCashAdvanceAmount] = useState('');
   const [advances, setAdvances] = useState([]);
+  const [markPaid, setMarkPaid] = useState(false);
+  const [proofFile, setProofFile] = useState(null);
+  const [payment, setPayment] = useState({
+    amount: '',
+    method: 'cash',
+    payment_date: new Date().toISOString().split('T')[0],
+    bank_reference: '',
+    notes: '',
+  });
 
   const shipmentObj = shipments.find((s) => String(s.id) === String(selectedShipment));
 
@@ -229,6 +243,8 @@ function InvoiceFormModal({ onClose, onSaved }) {
       .catch(console.error);
   }, [shipmentObj?.client_id]);
 
+  const setPay = (f) => (e) => setPayment((p) => ({ ...p, [f]: e.target.value }));
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedShipment) return;
@@ -238,13 +254,50 @@ function InvoiceFormModal({ onClose, onSaved }) {
       const auxiliary_fees = auxFees
         .filter((f) => f.label?.trim() && f.amount !== '' && !Number.isNaN(parseFloat(f.amount)))
         .map((f) => ({ label: f.label.trim(), amount: parseFloat(f.amount) }));
-      const payload = {
-        magerwa_price: magerwa === '' ? 0 : parseFloat(magerwa),
-        auxiliary_fees: auxiliary_fees.length ? auxiliary_fees : null,
-        cash_advance_id: cashAdvanceId || null,
-        cash_advance_amount: cashAdvanceAmount === '' ? undefined : parseFloat(cashAdvanceAmount),
-      };
-      await api.post(`/invoices/from-shipment/${selectedShipment}`, payload);
+
+      if (markPaid && (!payment.amount || parseFloat(payment.amount) <= 0)) {
+        setErrors({ payment_amount: ['Veuillez saisir le montant du paiement.'] });
+        setLoading(false);
+        return;
+      }
+
+      if (markPaid && proofFile) {
+        const formData = new FormData();
+        formData.append('magerwa_price', magerwa === '' ? '0' : magerwa);
+        auxiliary_fees.forEach((f, i) => {
+          formData.append(`auxiliary_fees[${i}][label]`, f.label);
+          formData.append(`auxiliary_fees[${i}][amount]`, String(f.amount));
+        });
+        if (cashAdvanceId) formData.append('cash_advance_id', cashAdvanceId);
+        if (cashAdvanceAmount !== '') formData.append('cash_advance_amount', cashAdvanceAmount);
+        formData.append('mark_paid', '1');
+        formData.append('payment_amount', payment.amount);
+        formData.append('payment_method', payment.method);
+        formData.append('payment_date', payment.payment_date);
+        if (payment.bank_reference) formData.append('payment_bank_reference', payment.bank_reference);
+        if (payment.notes) formData.append('payment_notes', payment.notes);
+        formData.append('proof', proofFile);
+        await api.post(`/invoices/from-shipment/${selectedShipment}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else {
+        const payload = {
+          magerwa_price: magerwa === '' ? 0 : parseFloat(magerwa),
+          auxiliary_fees: auxiliary_fees.length ? auxiliary_fees : null,
+          cash_advance_id: cashAdvanceId || null,
+          cash_advance_amount: cashAdvanceAmount === '' ? undefined : parseFloat(cashAdvanceAmount),
+        };
+        if (markPaid) {
+          payload.mark_paid = true;
+          payload.payment_amount = parseFloat(payment.amount);
+          payload.payment_method = payment.method;
+          payload.payment_date = payment.payment_date;
+          if (payment.bank_reference) payload.payment_bank_reference = payment.bank_reference;
+          if (payment.notes) payload.payment_notes = payment.notes;
+        }
+        await api.post(`/invoices/from-shipment/${selectedShipment}`, payload);
+      }
+
       onSaved();
       toast.success(t('common.saved'));
     } catch (err) {
@@ -258,8 +311,14 @@ function InvoiceFormModal({ onClose, onSaved }) {
       <form onSubmit={handleSubmit} className="space-y-4">
         <Select label={t('invoices.select_shipment')} value={selectedShipment} onChange={(e) => setSelectedShipment(e.target.value)} error={errors.shipment_id?.[0]} required>
           <option value="">{t('common.select')}</option>
-          {shipments.map((s) => <option key={s.id} value={s.id}>{s.tracking_number} - {s.client?.name}</option>)}
+          {shipments.map((s) => <option key={s.id} value={s.id}>{s.tracking_number} - {s.client?.name}{s.container_code ? ` (${s.container_code})` : ''}</option>)}
         </Select>
+        {shipmentObj && (
+          <div className="-mt-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-900">
+            Cette facture est pour l'expédition <strong>{shipmentObj.tracking_number}</strong> du client <strong>{shipmentObj.client?.name || '—'}</strong>
+            {shipmentObj.container_code ? <> dans le conteneur <strong>{shipmentObj.container_code}</strong></> : ' (aucun conteneur lié)'}.
+          </div>
+        )}
         <Input label={t('invoices.magerwa') + ' ($)'} type="number" step="0.01" min="0" value={magerwa} onChange={(e) => setMagerwa(e.target.value)} />
         <div className="space-y-2">
           <div className="text-sm font-medium text-gray-700">{t('invoices.auxiliary_fee')}</div>
@@ -279,9 +338,118 @@ function InvoiceFormModal({ onClose, onSaved }) {
           ))}
         </Select>
         <Input label={t('invoices.cash_advance') + ' ($)'} type="number" step="0.01" min="0" value={cashAdvanceAmount} onChange={(e) => setCashAdvanceAmount(e.target.value)} placeholder={t('invoices.optional_amount')} />
+
+        <div className="border-t border-gray-200 pt-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={markPaid} onChange={(e) => setMarkPaid(e.target.checked)} className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+            <span className="text-sm font-medium text-gray-800">Le client a déjà payé (enregistrer le paiement maintenant)</span>
+          </label>
+          <p className="text-xs text-gray-500 mt-1 ml-6">Décochez pour enregistrer comme brouillon.</p>
+        </div>
+
+        {markPaid && (
+          <div className="space-y-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Montant payé ($)" type="number" step="0.01" min="0.01" value={payment.amount} onChange={setPay('amount')} error={errors.payment_amount?.[0]} required={markPaid} />
+              <Select label="Mode de paiement" value={payment.method} onChange={setPay('method')} error={errors.payment_method?.[0]}>
+                <option value="cash">Cash</option>
+                <option value="mobile_money">Mobile Money</option>
+                <option value="bank_transfer">Virement bancaire</option>
+                <option value="check">Chèque</option>
+                <option value="other">Autre</option>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Date du paiement" type="date" value={payment.payment_date} onChange={setPay('payment_date')} error={errors.payment_date?.[0]} required={markPaid} />
+              <Input label="Référence bancaire (optionnel)" value={payment.bank_reference} onChange={setPay('bank_reference')} placeholder="Ex: TRF-2026-001" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Preuve de paiement (optionnel)</label>
+              <input type="file" accept="image/*,.pdf" onChange={(e) => setProofFile(e.target.files[0] || null)} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100" />
+              <p className="mt-1 text-xs text-gray-400">Image ou PDF, max 10 Mo</p>
+            </div>
+            <Input label="Notes de paiement (optionnel)" value={payment.notes} onChange={setPay('notes')} />
+          </div>
+        )}
+
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
           <Button type="submit" loading={loading}><FileText className="w-4 h-4 mr-2" />{t('invoices.generate')}</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function InvoicePayModal({ invoice, onClose, onSaved }) {
+  const { t } = useTranslation();
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [proofFile, setProofFile] = useState(null);
+  const balance = Math.max(0, Number(invoice.total || 0) - Number(invoice.amount_paid || 0));
+  const [form, setForm] = useState({
+    amount: balance > 0 ? balance.toFixed(2) : '',
+    method: 'cash',
+    payment_date: new Date().toISOString().split('T')[0],
+    bank_reference: '',
+    notes: '',
+  });
+
+  const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
+  const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrors({});
+    try {
+      const formData = new FormData();
+      formData.append('payment_amount', form.amount);
+      formData.append('payment_method', form.method);
+      formData.append('payment_date', form.payment_date);
+      if (form.bank_reference) formData.append('payment_bank_reference', form.bank_reference);
+      if (form.notes) formData.append('payment_notes', form.notes);
+      if (proofFile) formData.append('proof', proofFile);
+
+      await api.post(`/invoices/${invoice.id}/pay`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      onSaved();
+      toast.success(t('common.saved'));
+    } catch (err) {
+      if (err.response?.status === 422) setErrors(err.response.data.errors || {});
+      else toast.error(err.response?.data?.message || t('common.error'));
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title={`Payer ${invoice.invoice_number}`}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="p-3 bg-gray-50 rounded-lg flex justify-between text-sm">
+          <span className="text-gray-600">Solde dû:</span>
+          <span className="font-bold text-red-600">{formatMoney(balance)}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Montant ($)" type="number" step="0.01" min="0.01" value={form.amount} onChange={set('amount')} error={errors.payment_amount?.[0]} required />
+          <Select label="Mode de paiement" value={form.method} onChange={set('method')} error={errors.payment_method?.[0]}>
+            <option value="cash">Cash</option>
+            <option value="mobile_money">Mobile Money</option>
+            <option value="bank_transfer">Virement bancaire</option>
+            <option value="check">Chèque</option>
+            <option value="other">Autre</option>
+          </Select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Date du paiement" type="date" value={form.payment_date} onChange={set('payment_date')} error={errors.payment_date?.[0]} required />
+          <Input label="Référence bancaire (optionnel)" value={form.bank_reference} onChange={set('bank_reference')} placeholder="Ex: TRF-2026-001" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Preuve de paiement (optionnel)</label>
+          <input type="file" accept="image/*,.pdf" onChange={(e) => setProofFile(e.target.files[0] || null)} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100" />
+          <p className="mt-1 text-xs text-gray-400">Image ou PDF, max 10 Mo</p>
+        </div>
+        <Input label="Notes (optionnel)" value={form.notes} onChange={set('notes')} />
+        <div className="flex justify-end gap-3 pt-2">
+          <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button type="submit" loading={loading}><DollarSign className="w-4 h-4 mr-2" />Enregistrer le paiement</Button>
         </div>
       </form>
     </Modal>

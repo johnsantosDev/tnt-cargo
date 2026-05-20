@@ -156,11 +156,17 @@ export async function exportCashAdvanceInvoice(advance, t, { returnBlob = false 
   doc.setFontSize(10);
   doc.setTextColor(50);
 
+  const fdt = (d) => d ? new Date(d).toLocaleString('fr-FR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  }) : '-';
   const info = [
     [t('cash_advances.client'), advance.client?.name || '-'],
     [t('cash_advances.supplier_reference'), advance.supplier_reference || '-'],
     [t('cash_advances.issue_date'), fd(advance.issue_date)],
     [t('cash_advances.due_date'), fd(advance.due_date)],
+    ['Créée le', fdt(advance.created_at)],
+    ['Créée par', advance.creator?.name || advance.creator?.email || '—'],
   ];
   info.forEach(([label, val]) => {
     doc.setFont(undefined, 'bold');
@@ -205,24 +211,82 @@ export async function exportCashAdvanceInvoice(advance, t, { returnBlob = false 
     margin: { left: 14, right: 14 },
   });
 
-  // Notes
-  if (advance.notes) {
-    const fY = doc.lastAutoTable.finalY + 10;
+  // Status-aware notes block
+  {
+    const isPaid = advance.status === 'paid' || balance <= 0;
+    const isOverdue = advance.status === 'overdue';
+    const isPartial = advance.status === 'partial' || (totalPaid > 0 && balance > 0);
+
+    let noticeLines = [];
+    let noticeColor = [50, 50, 50];
+
+    if (isPaid) {
+      noticeColor = [5, 150, 105]; // green
+      noticeLines = [
+        'Cette avance a été intégralement remboursée. Aucun solde restant n\'est dû.',
+        'Nous vous remercions pour votre paiement et votre collaboration.',
+        'Ce document fait office de confirmation de règlement.',
+      ];
+    } else if (isOverdue) {
+      noticeColor = [220, 38, 38]; // red
+      noticeLines = [
+        'Nous vous rappelons que vous avez une dette envers la société TNT.',
+        'Cette dette est échue. Veuillez procéder au règlement immédiatement.',
+        'Nous comptons sur votre collaboration pour régulariser la situation dans les plus brefs délais.',
+      ];
+    } else if (isPartial) {
+      noticeColor = [217, 119, 6]; // amber
+      noticeLines = [
+        `Paiement partiel reçu. Solde restant: ${fm(balance)}.`,
+        'Le solde devra être réglé avant la date d\'échéance indiquée.',
+        'Merci pour votre collaboration.',
+      ];
+    } else {
+      noticeLines = [
+        'Nous vous rappelons que vous avez une dette envers la société TNT.',
+        'Nous vous informons que le paiement de cette dette devra être effectué immédiatement après le retrait / la réception de vos marchandises.',
+        'Nous comptons sur votre collaboration pour régulariser la situation dans les plus brefs délais.',
+      ];
+    }
+
+    let fY = doc.lastAutoTable.finalY + 10;
     doc.setFontSize(10);
     doc.setFont(undefined, 'bold');
-    doc.setTextColor(50);
+    doc.setTextColor(...noticeColor);
     doc.text(`${t('common.notes')}:`, 14, fY);
     doc.setFont(undefined, 'normal');
-    doc.text(advance.notes, 14, fY + 6, { maxWidth: pw - 28 });
+    doc.setTextColor(60);
+    fY += 6;
+    noticeLines.forEach((line) => {
+      const split = doc.splitTextToSize(line, pw - 28);
+      doc.text(split, 14, fY);
+      fY += split.length * 5;
+    });
+
+    if (advance.notes && !isPaid) {
+      fY += 4;
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(50);
+      doc.text('Notes additionnelles:', 14, fY);
+      doc.setFont(undefined, 'normal');
+      const split = doc.splitTextToSize(advance.notes, pw - 28);
+      doc.text(split, 14, fY + 6);
+    }
   }
 
   // Footer
+  const creatorName = advance.creator?.name || advance.creator?.email || '—';
+  const printedAt = new Date().toLocaleString('fr-FR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
   doc.setFontSize(9);
   doc.setTextColor(30, 64, 175);
-  doc.text('TNT Cargo System', pw / 2, ph - 12, { align: 'center' });
+  doc.text('TNT Cargo System', pw / 2, ph - 18, { align: 'center' });
   doc.setFontSize(7);
   doc.setTextColor(150);
-  doc.text('Logistique internationale — RDC', pw / 2, ph - 8, { align: 'center' });
+  doc.text('Logistique internationale — RDC', pw / 2, ph - 14, { align: 'center' });
+  doc.text(`Créée par ${creatorName} — Imprimée le ${printedAt}`, pw / 2, ph - 9, { align: 'center' });
 
   if (returnBlob) {
     return doc.output('blob');
