@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -218,6 +218,7 @@ function InvoiceFormModal({ onClose, onSaved }) {
   const [cashAdvanceAmount, setCashAdvanceAmount] = useState('');
   const [advances, setAdvances] = useState([]);
   const [markPaid, setMarkPaid] = useState(false);
+  const [amountTouched, setAmountTouched] = useState(false);
   const [proofFile, setProofFile] = useState(null);
   const [payment, setPayment] = useState({
     amount: '',
@@ -228,6 +229,39 @@ function InvoiceFormModal({ onClose, onSaved }) {
   });
 
   const shipmentObj = shipments.find((s) => String(s.id) === String(selectedShipment));
+
+  const expeditionFees = useMemo(() => {
+    if (!shipmentObj) return 0;
+    const plCargo = Number(shipmentObj.pl_cargo_subtotal || 0);
+    const plFreight = Number(shipmentObj.pl_freight_subtotal || 0);
+    const shipping = (plCargo > 0 || plFreight > 0)
+      ? plCargo + plFreight
+      : Number(shipmentObj.shipping_cost || 0);
+    const customs = Number(shipmentObj.customs_fee || 0);
+    const warehouse = Number(shipmentObj.warehouse_fee || 0);
+    const other = Number(shipmentObj.other_fees || 0);
+    const insurance = Number(shipmentObj.insurance_amount || 0);
+    const lines = (shipmentObj.calculation_lines || []).reduce(
+      (s, l) => s + Number(l?.amount || 0),
+      0
+    );
+    return shipping + customs + warehouse + other + insurance + lines;
+  }, [shipmentObj]);
+
+  const magerwaNum = useMemo(() => Number(magerwa) || 0, [magerwa]);
+  const auxTotal = useMemo(
+    () => auxFees.reduce((s, f) => s + (Number(f.amount) || 0), 0),
+    [auxFees]
+  );
+  const cashAdvanceNum = useMemo(
+    () => (cashAdvanceAmount === '' ? 0 : Number(cashAdvanceAmount) || 0),
+    [cashAdvanceAmount]
+  );
+  const expectedTotal = Math.max(
+    0,
+    expeditionFees + magerwaNum + auxTotal - cashAdvanceNum
+  );
+  const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
 
   useEffect(() => {
     api.get('/shipments', { params: { per_page: 100 } }).then(({ data }) => setShipments(data.data)).catch(console.error);
@@ -243,6 +277,18 @@ function InvoiceFormModal({ onClose, onSaved }) {
       .catch(console.error);
   }, [shipmentObj?.client_id]);
 
+  useEffect(() => {
+    if (markPaid && !amountTouched) {
+      setPayment((p) => ({
+        ...p,
+        amount: expectedTotal > 0 ? expectedTotal.toFixed(2) : '',
+      }));
+    }
+    if (!markPaid) {
+      setAmountTouched(false);
+    }
+  }, [markPaid, amountTouched, expectedTotal]);
+
   const setPay = (f) => (e) => setPayment((p) => ({ ...p, [f]: e.target.value }));
 
   const handleSubmit = async (e) => {
@@ -257,6 +303,16 @@ function InvoiceFormModal({ onClose, onSaved }) {
 
       if (markPaid && (!payment.amount || parseFloat(payment.amount) <= 0)) {
         setErrors({ payment_amount: ['Veuillez saisir le montant du paiement.'] });
+        setLoading(false);
+        return;
+      }
+
+      if (markPaid && expectedTotal > 0 && parseFloat(payment.amount) < expectedTotal) {
+        setErrors({
+          payment_amount: [
+            `Le montant payé doit être au moins égal au total (${formatMoney(expectedTotal)}).`,
+          ],
+        });
         setLoading(false);
         return;
       }
@@ -350,7 +406,50 @@ function InvoiceFormModal({ onClose, onSaved }) {
         {markPaid && (
           <div className="space-y-3 p-3 bg-green-50 border border-green-200 rounded-lg">
             <div className="grid grid-cols-2 gap-3">
-              <Input label="Montant payé ($)" type="number" step="0.01" min="0.01" value={payment.amount} onChange={setPay('amount')} error={errors.payment_amount?.[0]} required={markPaid} />
+              <div>
+                <Input
+                  label="Montant payé ($)"
+                  type="number"
+                  step="0.01"
+                  min={expectedTotal > 0 ? expectedTotal.toFixed(2) : '0.01'}
+                  value={payment.amount}
+                  onChange={(e) => { setAmountTouched(true); setPay('amount')(e); }}
+                  error={errors.payment_amount?.[0]}
+                  required={markPaid}
+                />
+                {expectedTotal > 0 && (
+                  <div className="mt-2 text-xs text-gray-700 space-y-0.5">
+                    <div className="flex justify-between">
+                      <span>Frais d'expédition</span>
+                      <span>{formatMoney(expeditionFees)}</span>
+                    </div>
+                    {magerwaNum > 0 && (
+                      <div className="flex justify-between">
+                        <span>Magerwa</span>
+                        <span>{formatMoney(magerwaNum)}</span>
+                      </div>
+                    )}
+                    {auxFees
+                      .filter((f) => f.label?.trim() && Number(f.amount) > 0)
+                      .map((f, i) => (
+                        <div key={i} className="flex justify-between">
+                          <span>{f.label}</span>
+                          <span>{formatMoney(Number(f.amount))}</span>
+                        </div>
+                      ))}
+                    {cashAdvanceNum > 0 && (
+                      <div className="flex justify-between text-orange-700">
+                        <span>Avance déduite</span>
+                        <span>-{formatMoney(cashAdvanceNum)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-semibold border-t border-green-300 pt-1 mt-1">
+                      <span>Total à payer</span>
+                      <span>{formatMoney(expectedTotal)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
               <Select label="Mode de paiement" value={payment.method} onChange={setPay('method')} error={errors.payment_method?.[0]}>
                 <option value="cash">Cash</option>
                 <option value="mobile_money">Mobile Money</option>

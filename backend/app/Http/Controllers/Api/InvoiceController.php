@@ -267,7 +267,11 @@ class InvoiceController extends Controller
         }
 
         if (count($items) === 0) {
-            return response()->json(['message' => 'Aucune ligne facturable sur cette expédition.'], 422);
+            $items[] = [
+                'description' => "Frais d'expédition",
+                'quantity' => 1,
+                'unit_price' => (float) ($shipment->total_cost ?? 0),
+            ];
         }
 
         $magerwa = (float) ($validated['magerwa_price'] ?? 0);
