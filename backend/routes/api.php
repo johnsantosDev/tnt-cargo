@@ -68,6 +68,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('invoices', InvoiceController::class);
     Route::post('/invoices/from-shipment/{shipment}', [InvoiceController::class, 'generateFromShipment']);
     Route::get('/invoices/{invoice}/pdf', [InvoiceController::class, 'downloadPdf']);
+    Route::post('/invoices/{invoice}/pay', [InvoiceController::class, 'pay']);
 
     // Flight Tickets
     Route::apiResource('flight-tickets', FlightTicketController::class);

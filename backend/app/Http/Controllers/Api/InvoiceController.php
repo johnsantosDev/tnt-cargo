@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CashAdvance;
+use App\Models\Client;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
+use App\Models\Payment;
 use App\Models\Shipment;
 use App\Services\AuditService;
 use App\Support\RegionContext;
@@ -145,10 +147,43 @@ class InvoiceController extends Controller
             'due_date' => 'sometimes|date',
             'notes' => 'nullable|string',
             'amount_paid' => 'sometimes|numeric|min:0',
+            'payment_amount' => 'nullable|numeric|min:0.01',
+            'payment_method' => 'nullable|in:cash,bank_transfer,mobile_money,check,other',
+            'payment_date' => 'nullable|date',
+            'payment_bank_reference' => 'nullable|string|max:255',
+            'payment_notes' => 'nullable|string',
         ]);
 
+        $statusChangingToPaid = isset($validated['status'])
+            && $validated['status'] === 'paid'
+            && $invoice->status !== 'paid';
+
+        if ($statusChangingToPaid && empty($validated['payment_amount'])) {
+            return response()->json([
+                'message' => 'Pour marquer cette facture comme payée, vous devez fournir les détails du paiement (montant, mode, date).',
+                'errors' => [
+                    'payment_amount' => ['Le montant du paiement est requis.'],
+                    'payment_method' => ['Le mode de paiement est requis.'],
+                    'payment_date' => ['La date du paiement est requise.'],
+                ],
+            ], 422);
+        }
+
         $oldValues = $invoice->toArray();
-        $invoice->update($validated);
+
+        $payload = collect($validated)->except([
+            'status', 'amount_paid', 'payment_amount', 'payment_method',
+            'payment_date', 'payment_bank_reference', 'payment_notes',
+        ])->toArray();
+
+        // Allow status changes that aren't draft->paid (which goes through the payment flow)
+        if (isset($validated['status']) && !$statusChangingToPaid) {
+            $payload['status'] = $validated['status'];
+        }
+
+        if (!empty($payload)) {
+            $invoice->update($payload);
+        }
 
         if (array_key_exists('magerwa_price', $validated) || array_key_exists('auxiliary_fees', $validated)
             || array_key_exists('cash_advance_amount', $validated) || array_key_exists('cash_advance_id', $validated)
@@ -157,19 +192,22 @@ class InvoiceController extends Controller
             $invoice->save();
         }
 
-        if (isset($validated['amount_paid'])) {
-            if ($invoice->amount_paid >= $invoice->total) {
+        if ($statusChangingToPaid) {
+            $this->createPaymentForInvoice($request, $invoice, $validated);
+        } elseif (isset($validated['amount_paid'])) {
+            $invoice->update(['amount_paid' => $validated['amount_paid']]);
+            if ($invoice->amount_paid >= $invoice->total && $invoice->total > 0) {
                 $invoice->update(['status' => 'paid', 'paid_date' => now()]);
             } elseif ($invoice->amount_paid > 0) {
                 $invoice->update(['status' => 'partial']);
             }
         }
 
-        AuditService::log('updated', $invoice, $oldValues, $invoice->toArray());
+        AuditService::log('updated', $invoice, $oldValues, $invoice->fresh()->toArray());
 
         return response()->json([
             'message' => 'Facture mise à jour.',
-            'invoice' => $invoice->load(['client', 'items', 'cashAdvance']),
+            'invoice' => $invoice->fresh()->load(['client', 'items', 'cashAdvance']),
         ]);
     }
 
@@ -182,6 +220,12 @@ class InvoiceController extends Controller
             'auxiliary_fees.*.amount' => 'required_with:auxiliary_fees|numeric|min:0',
             'cash_advance_id' => 'nullable|exists:cash_advances,id',
             'cash_advance_amount' => 'nullable|numeric|min:0',
+            'mark_paid' => 'nullable|boolean',
+            'payment_amount' => 'nullable|numeric|min:0.01',
+            'payment_method' => 'nullable|in:cash,bank_transfer,mobile_money,check,other',
+            'payment_date' => 'nullable|date',
+            'payment_bank_reference' => 'nullable|string|max:255',
+            'payment_notes' => 'nullable|string',
         ]);
 
         $items = [];
@@ -277,17 +321,105 @@ class InvoiceController extends Controller
             $invoice->update(['status' => 'partial']);
         }
 
+        if (!empty($validated['mark_paid']) && (float) ($validated['payment_amount'] ?? 0) > 0) {
+            $this->createPaymentForInvoice($request, $invoice, $validated);
+        }
+
         return response()->json([
             'message' => 'Facture générée depuis l\'expédition.',
-            'invoice' => $invoice->load(['client', 'items', 'cashAdvance']),
+            'invoice' => $invoice->fresh()->load(['client', 'items', 'cashAdvance']),
         ], 201);
     }
 
-    public function downloadPdf(Invoice $invoice)
+    public function pay(Request $request, Invoice $invoice): JsonResponse
+    {
+        $validated = $request->validate([
+            'payment_amount' => 'required|numeric|min:0.01',
+            'payment_method' => 'required|in:cash,bank_transfer,mobile_money,check,other',
+            'payment_date' => 'required|date',
+            'payment_bank_reference' => 'nullable|string|max:255',
+            'payment_notes' => 'nullable|string',
+            'proof' => 'nullable|file|max:10240|mimes:jpg,jpeg,png,pdf',
+        ]);
+
+        $payment = $this->createPaymentForInvoice($request, $invoice, $validated);
+
+        return response()->json([
+            'message' => 'Paiement enregistré pour la facture.',
+            'invoice' => $invoice->fresh()->load(['client', 'items', 'cashAdvance']),
+            'payment' => $payment->load(['client', 'shipment']),
+        ]);
+    }
+
+    private function createPaymentForInvoice(Request $request, Invoice $invoice, array $data): Payment
+    {
+        $amount = (float) ($data['payment_amount'] ?? 0);
+        $proofPath = null;
+        $proofType = null;
+        if ($request->hasFile('proof')) {
+            $file = $request->file('proof');
+            $proofPath = $file->store('payment-proofs', 'public');
+            $proofType = $file->getMimeType();
+        }
+
+        $payment = Payment::create([
+            'reference' => Payment::generateReference(),
+            'client_id' => $invoice->client_id,
+            'shipment_id' => $invoice->shipment_id,
+            'amount' => $amount,
+            'currency' => $invoice->currency ?? 'USD',
+            'method' => $data['payment_method'] ?? 'cash',
+            'type' => 'income',
+            'status' => 'completed',
+            'notes' => $data['payment_notes'] ?? null,
+            'payment_date' => $data['payment_date'] ?? now(),
+            'bank_reference' => $data['payment_bank_reference'] ?? null,
+            'proof_path' => $proofPath,
+            'proof_type' => $proofType,
+            'received_by' => $request->user()->id,
+            'created_by' => $request->user()->id,
+            'region' => RegionContext::resolveWriteRegion($request),
+        ]);
+
+        if ($invoice->shipment_id) {
+            $shipment = Shipment::find($invoice->shipment_id);
+            if ($shipment) {
+                $shipment->increment('amount_paid', $amount);
+                $shipment->balance_due = $shipment->total_cost - $shipment->amount_paid;
+                $shipment->save();
+            }
+        }
+
+        $invoice->increment('amount_paid', $amount);
+        $invoice->refresh();
+        if ($invoice->amount_paid >= $invoice->total && $invoice->total > 0) {
+            $invoice->update(['status' => 'paid', 'paid_date' => now()]);
+        } elseif ($invoice->amount_paid > 0) {
+            $invoice->update(['status' => 'partial']);
+        }
+
+        if ($invoice->client) {
+            $invoice->client->increment('total_spent', $amount);
+            $totalShipmentDebt = Shipment::where('client_id', $invoice->client_id)
+                ->where('balance_due', '>', 0)
+                ->sum('balance_due');
+            $totalAdvanceDebt = CashAdvance::where('client_id', $invoice->client_id)
+                ->whereIn('status', ['active', 'overdue'])
+                ->sum('balance');
+            Client::where('id', $invoice->client_id)
+                ->update(['total_debt' => $totalShipmentDebt + $totalAdvanceDebt]);
+        }
+
+        AuditService::log('payment_added', $invoice, null, $payment->toArray());
+
+        return $payment;
+    }
+
+    public function downloadPdf(Request $request, Invoice $invoice)
     {
         try {
             // Always-required relations
-            $invoice->load(['client', 'items', 'shipment']);
+            $invoice->load(['client', 'items', 'shipment.packingLists.items', 'creator']);
 
             // cashAdvance is from a newer migration; if it isn't deployed yet, $invoice doesn't
             // have a cash_advance_id column and eager-loading the relation throws. Best-effort load.
@@ -298,7 +430,10 @@ class InvoiceController extends Controller
                 $invoice->setRelation('cashAdvance', null);
             }
 
-            $pdf = Pdf::loadView('invoices.pdf', compact('invoice'));
+            $printedBy = $request->user();
+            $printedAt = now();
+
+            $pdf = Pdf::loadView('invoices.pdf', compact('invoice', 'printedBy', 'printedAt'));
             $clientName = str_replace(' ', '_', $invoice->client->name ?? 'client');
             $timestamp = now()->format('dmYHis');
             return $pdf->download("facture-{$clientName}-{$invoice->invoice_number}-{$timestamp}.pdf");
