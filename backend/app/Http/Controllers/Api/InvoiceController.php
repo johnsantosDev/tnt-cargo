@@ -461,7 +461,7 @@ class InvoiceController extends Controller
         }
 
         AuditService::log('deleted', $invoice, $invoice->toArray(), null);
-        $invoice->delete();
+        $invoice->forceDelete();
 
         return response()->json(['message' => 'Facture supprimée.']);
     }

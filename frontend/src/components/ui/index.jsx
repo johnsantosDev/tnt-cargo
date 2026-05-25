@@ -1,4 +1,5 @@
-export function Button({ children, variant = 'primary', size = 'md', className = '', disabled = false, ...props }) {
+export function Button({ children, variant = 'primary', size = 'md', className = '', disabled = false, loading = false, ...props }) {
+  const isDisabled = disabled || loading;
   const base = 'btn cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
   const variants = {
     primary: 'bg-gray-900 text-gray-100 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-800 dark:hover:bg-white',
@@ -17,7 +18,10 @@ export function Button({ children, variant = 'primary', size = 'md', className =
   };
 
   return (
-    <button className={`${base} ${variants[variant]} ${sizes[size]} ${className}`} disabled={disabled} {...props}>
+    <button className={`${base} ${variants[variant]} ${sizes[size]} ${className}`} disabled={isDisabled} {...props}>
+      {loading && (
+        <span className="inline-flex items-center justify-center w-4 h-4 mr-2 border-2 border-current border-t-transparent rounded-full animate-spin" />
+      )}
       {children}
     </button>
   );
