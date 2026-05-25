@@ -49,7 +49,7 @@ return Application::configure(basePath: dirname(__DIR__))
                             $message = 'Un élément lié à cet enregistrement est introuvable. Vérifiez vos données.';
                         }
                     } elseif ($driverCode === 1062) {
-                        $message = 'Cet enregistrement existe déjà (valeur unique en doublon).';
+                        $message = 'La facture pour cet enregistrement existe déjà (veuillez vérifier votre selection).';
                     } elseif ($driverCode === 1451) {
                         $message = 'Impossible de supprimer cet élément car il est utilisé ailleurs.';
                     } elseif ($driverCode === 1048) {

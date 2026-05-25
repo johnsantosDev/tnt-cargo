@@ -206,11 +206,20 @@ export default function InvoicesPage() {
   );
 }
 
+// Helper to parse numbers that may use comma as decimal separator (e.g. "137,48")
+function parseLocaleNumber(v) {
+  if (v === '' || v === null || v === undefined) return NaN;
+  if (typeof v === 'number') return v;
+  const s = String(v).replace(/\s+/g, '').replace(',', '.');
+  return parseFloat(s);
+}
+
 function InvoiceFormModal({ onClose, onSaved }) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [shipments, setShipments] = useState([]);
+  const [existingInvoices, setExistingInvoices] = useState([]);
   const [selectedShipment, setSelectedShipment] = useState('');
   const [magerwa, setMagerwa] = useState('');
   const [auxFees, setAuxFees] = useState([{ label: '', amount: '' }]);
@@ -265,6 +274,8 @@ function InvoiceFormModal({ onClose, onSaved }) {
 
   useEffect(() => {
     api.get('/shipments', { params: { per_page: 100 } }).then(({ data }) => setShipments(data.data)).catch(console.error);
+    // preload invoices so we can detect shipments that already have an invoice
+    api.get('/invoices', { params: { per_page: 500 } }).then(({ data }) => setExistingInvoices(data.data || [])).catch(() => setExistingInvoices([]));
   }, []);
 
   useEffect(() => {
@@ -301,13 +312,13 @@ function InvoiceFormModal({ onClose, onSaved }) {
         .filter((f) => f.label?.trim() && f.amount !== '' && !Number.isNaN(parseFloat(f.amount)))
         .map((f) => ({ label: f.label.trim(), amount: parseFloat(f.amount) }));
 
-      if (markPaid && (!payment.amount || parseFloat(payment.amount) <= 0)) {
+      if (markPaid && (!payment.amount || parseLocaleNumber(payment.amount) <= 0)) {
         setErrors({ payment_amount: ['Veuillez saisir le montant du paiement.'] });
         setLoading(false);
         return;
       }
 
-      if (markPaid && expectedTotal > 0 && parseFloat(payment.amount) < expectedTotal) {
+      if (markPaid && expectedTotal > 0 && parseLocaleNumber(payment.amount) < expectedTotal) {
         setErrors({
           payment_amount: [
             `Le montant payé doit être au moins égal au total (${formatMoney(expectedTotal)}).`,
@@ -327,7 +338,8 @@ function InvoiceFormModal({ onClose, onSaved }) {
         if (cashAdvanceId) formData.append('cash_advance_id', cashAdvanceId);
         if (cashAdvanceAmount !== '') formData.append('cash_advance_amount', cashAdvanceAmount);
         formData.append('mark_paid', '1');
-        formData.append('payment_amount', payment.amount);
+        // normalize decimal comma to dot before sending
+        formData.append('payment_amount', String(parseLocaleNumber(payment.amount) || 0));
         formData.append('payment_method', payment.method);
         formData.append('payment_date', payment.payment_date);
         if (payment.bank_reference) formData.append('payment_bank_reference', payment.bank_reference);
@@ -345,7 +357,7 @@ function InvoiceFormModal({ onClose, onSaved }) {
         };
         if (markPaid) {
           payload.mark_paid = true;
-          payload.payment_amount = parseFloat(payment.amount);
+          payload.payment_amount = parseLocaleNumber(payment.amount);
           payload.payment_method = payment.method;
           payload.payment_date = payment.payment_date;
           if (payment.bank_reference) payload.payment_bank_reference = payment.bank_reference;
@@ -365,7 +377,21 @@ function InvoiceFormModal({ onClose, onSaved }) {
   return (
     <Modal isOpen onClose={onClose} title={t('invoices.generate')}>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Select label={t('invoices.select_shipment')} value={selectedShipment} onChange={(e) => setSelectedShipment(e.target.value)} error={errors.shipment_id?.[0]} required>
+        <Select label={t('invoices.select_shipment')} value={selectedShipment} onChange={(e) => {
+          const val = e.target.value;
+          setSelectedShipment(val);
+          // if this shipment already has an invoice, show immediate error
+          const hasInvoice = existingInvoices.some(inv => String(inv.shipment?.id) === String(val));
+          if (hasInvoice) {
+            setErrors((prev) => ({ ...prev, shipment_id: ['Cet enregistrement existe déjà (valeur unique en doublon).'] }));
+          } else {
+            setErrors((prev) => {
+              const copy = { ...prev };
+              delete copy.shipment_id;
+              return copy;
+            });
+          }
+        }} error={errors.shipment_id?.[0]} required>
           <option value="">{t('common.select')}</option>
           {shipments.map((s) => <option key={s.id} value={s.id}>{s.tracking_number} - {s.client?.name}{s.container_code ? ` (${s.container_code})` : ''}</option>)}
         </Select>
@@ -503,7 +529,8 @@ function InvoicePayModal({ invoice, onClose, onSaved }) {
     setErrors({});
     try {
       const formData = new FormData();
-      formData.append('payment_amount', form.amount);
+      // normalize decimal comma to dot before sending
+      formData.append('payment_amount', String(parseLocaleNumber(form.amount) || 0));
       formData.append('payment_method', form.method);
       formData.append('payment_date', form.payment_date);
       if (form.bank_reference) formData.append('payment_bank_reference', form.bank_reference);
