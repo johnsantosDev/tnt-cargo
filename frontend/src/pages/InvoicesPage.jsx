@@ -318,14 +318,21 @@ function InvoiceFormModal({ onClose, onSaved }) {
         return;
       }
 
-      if (markPaid && expectedTotal > 0 && parseLocaleNumber(payment.amount) < expectedTotal) {
-        setErrors({
-          payment_amount: [
-            `Le montant payé doit être au moins égal au total (${formatMoney(expectedTotal)}).`,
-          ],
-        });
-        setLoading(false);
-        return;
+      if (markPaid && expectedTotal > 0) {
+        const paidNum = parseLocaleNumber(payment.amount) || 0;
+        const paidStr = paidNum.toFixed(2);
+        const expectedStr = expectedTotal.toFixed(2);
+        // If the rounded-to-cent display values match, treat as equal (avoids floating-point noise like 137.48000000000002).
+        const isMatch = paidStr === expectedStr;
+        if (!isMatch && parseFloat(paidStr) < parseFloat(expectedStr)) {
+          setErrors({
+            payment_amount: [
+              `Le montant payé doit être au moins égal au total (${formatMoney(expectedTotal)}).`,
+            ],
+          });
+          setLoading(false);
+          return;
+        }
       }
 
       if (markPaid && proofFile) {
