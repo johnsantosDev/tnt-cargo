@@ -38,17 +38,25 @@ class Invoice extends Model
 
     public static function generateInvoiceNumber(): string
     {
-        do {
-            $num = 'INV-' . date('Ym') . '-' . str_pad(
-                static::whereYear('created_at', date('Y'))
-                    ->whereMonth('created_at', date('m'))
-                    ->count() + 1,
-                4,
-                '0',
-                STR_PAD_LEFT
-            );
-        } while (static::where('invoice_number', $num)->exists());
-        return $num;
+        // Use MAX(invoice_number) over withTrashed() so deleted invoices (soft or hard)
+        // never cause us to re-issue a number that's already in use. The original
+        // count()+1 implementation would loop forever once any invoice from the current
+        // month was deleted, because count() excluded the deleted row while the
+        // existence check still saw the matching live row at the same sequence.
+        $prefix = 'INV-' . date('Ym') . '-';
+
+        // 4-digit zero-padded suffix means lexicographic ORDER BY matches numeric order.
+        $lastNumber = static::withTrashed()
+            ->where('invoice_number', 'like', $prefix . '%')
+            ->orderByDesc('invoice_number')
+            ->value('invoice_number');
+
+        $lastSeq = 0;
+        if ($lastNumber && preg_match('/(\d+)$/', $lastNumber, $m)) {
+            $lastSeq = (int) $m[1];
+        }
+
+        return $prefix . str_pad($lastSeq + 1, 4, '0', STR_PAD_LEFT);
     }
 
     public function client()

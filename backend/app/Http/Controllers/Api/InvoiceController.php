@@ -15,6 +15,8 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class InvoiceController extends Controller
 {
@@ -50,6 +52,8 @@ class InvoiceController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $this->setShortLockWaitTimeout();
+
         $validated = $request->validate([
             'client_id' => 'required|exists:clients,id',
             'shipment_id' => 'nullable|exists:shipments,id',
@@ -134,6 +138,8 @@ class InvoiceController extends Controller
 
     public function update(Request $request, Invoice $invoice): JsonResponse
     {
+        $this->setShortLockWaitTimeout();
+
         $validated = $request->validate([
             'status' => 'sometimes|in:draft,sent,paid,partial,overdue,cancelled',
             'tax_amount' => 'sometimes|numeric|min:0',
@@ -213,6 +219,12 @@ class InvoiceController extends Controller
 
     public function generateFromShipment(Request $request, Shipment $shipment): JsonResponse
     {
+        // If a previous stuck request is holding a row lock on the invoices table,
+        // this caps how long we'll wait before failing fast. Without this, MySQL's
+        // default innodb_lock_wait_timeout (50s) plus PHP's HTTP keep-alive can make
+        // a single bad request hang the UI indefinitely.
+        $this->setShortLockWaitTimeout();
+
         $validated = $request->validate([
             'magerwa_price' => 'nullable|numeric|min:0',
             'auxiliary_fees' => 'nullable|array',
@@ -337,6 +349,8 @@ class InvoiceController extends Controller
 
     public function pay(Request $request, Invoice $invoice): JsonResponse
     {
+        $this->setShortLockWaitTimeout();
+
         $validated = $request->validate([
             'payment_amount' => 'required|numeric|min:0.01',
             'payment_method' => 'required|in:cash,bank_transfer,mobile_money,check,other',
@@ -353,6 +367,22 @@ class InvoiceController extends Controller
             'invoice' => $invoice->fresh()->load(['client', 'items', 'cashAdvance']),
             'payment' => $payment->load(['client', 'shipment']),
         ]);
+    }
+
+    /**
+     * Set a short InnoDB lock wait timeout for this DB session so a single hung
+     * lock can't make the HTTP request hang indefinitely. Safe to call repeatedly;
+     * the statement is a no-op on drivers that don't recognise it.
+     */
+    private function setShortLockWaitTimeout(): void
+    {
+        try {
+            if (DB::connection()->getDriverName() === 'mysql') {
+                DB::statement('SET SESSION innodb_lock_wait_timeout = 5');
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Could not set innodb_lock_wait_timeout', ['error' => $e->getMessage()]);
+        }
     }
 
     private function createPaymentForInvoice(Request $request, Invoice $invoice, array $data): Payment

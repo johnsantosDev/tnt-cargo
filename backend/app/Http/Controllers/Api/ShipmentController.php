@@ -45,6 +45,9 @@ class ShipmentController extends Controller
         if ($request->filled('date_to')) {
             $query->whereDate('created_at', '<=', $request->date_to);
         }
+        if ($request->boolean('no_invoice')) {
+            $query->whereDoesntHave('invoice');
+        }
 
         $sortField = $request->get('sort', 'created_at');
         $sortDir = $request->get('direction', 'desc');

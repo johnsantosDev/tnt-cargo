@@ -2,6 +2,9 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
+  // Hard cap any single request at 60s so a hung backend can never leave the UI
+  // stuck in an infinite loading state. PDF downloads typically need more headroom.
+  timeout: 60000,
   headers: {
     Accept: 'application/json',
   },

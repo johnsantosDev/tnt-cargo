@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal } from '../components/ui';
-import { Plus, Search, Download, FileText, Eye, MessageCircle, Trash2, DollarSign } from 'lucide-react';
+import { Plus, Search, Download, FileText, Eye, MessageCircle, Trash2, DollarSign, Pencil } from 'lucide-react';
 import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
 import { sendViaWhatsApp } from '../utils/export';
 import ExportButtons from '../components/ui/ExportButtons';
@@ -22,6 +22,7 @@ export default function InvoicesPage() {
   const [showForm, setShowForm] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
   const [showPay, setShowPay] = useState(null);
+  const [showEdit, setShowEdit] = useState(null);
   const [whatsappModal, setWhatsappModal] = useState(null);
 
   const fetchInvoices = useCallback(() => {
@@ -124,6 +125,9 @@ export default function InvoicesPage() {
       key: 'actions', label: '', render: (row) => (
         <div className="flex gap-1">
           <button onClick={() => setShowDetail(row)} className="p-1.5 text-gray-400 hover:text-primary-600"><Eye className="w-4 h-4" /></button>
+          {(isManager || hasPermission('invoices.update')) && row.status !== 'paid' && row.status !== 'cancelled' && (
+            <button onClick={() => setShowEdit(row)} className="p-1.5 text-gray-400 hover:text-blue-600" title={t('common.edit')}><Pencil className="w-4 h-4" /></button>
+          )}
           {row.status !== 'paid' && row.status !== 'cancelled' && hasPermission('payments.create') && (
             <button onClick={() => setShowPay(row)} className="p-1.5 text-gray-400 hover:text-green-600" title="Payer cette facture"><DollarSign className="w-4 h-4" /></button>
           )}
@@ -188,6 +192,7 @@ export default function InvoicesPage() {
       </Card>
 
       {showForm && <InvoiceFormModal onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); fetchInvoices(); }} />}
+      {showEdit && <InvoiceEditModal invoice={showEdit} onClose={() => setShowEdit(null)} onSaved={() => { setShowEdit(null); fetchInvoices(); }} />}
       {showPay && <InvoicePayModal invoice={showPay} onClose={() => setShowPay(null)} onSaved={() => { setShowPay(null); fetchInvoices(); }} />}
       {showDetail && (
         <InvoiceDetailModal
@@ -219,7 +224,6 @@ function InvoiceFormModal({ onClose, onSaved }) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [shipments, setShipments] = useState([]);
-  const [existingInvoices, setExistingInvoices] = useState([]);
   const [selectedShipment, setSelectedShipment] = useState('');
   const [magerwa, setMagerwa] = useState('');
   const [auxFees, setAuxFees] = useState([{ label: '', amount: '' }]);
@@ -273,9 +277,10 @@ function InvoiceFormModal({ onClose, onSaved }) {
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
 
   useEffect(() => {
-    api.get('/shipments', { params: { per_page: 100 } }).then(({ data }) => setShipments(data.data)).catch(console.error);
-    // preload invoices so we can detect shipments that already have an invoice
-    api.get('/invoices', { params: { per_page: 500 } }).then(({ data }) => setExistingInvoices(data.data || [])).catch(() => setExistingInvoices([]));
+    // Only fetch shipments that don't have an invoice yet — saves a 500-row prefetch.
+    api.get('/shipments', { params: { per_page: 100, no_invoice: 1 } })
+      .then(({ data }) => setShipments(data.data || []))
+      .catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -385,19 +390,13 @@ function InvoiceFormModal({ onClose, onSaved }) {
     <Modal isOpen onClose={onClose} title={t('invoices.generate')}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <Select label={t('invoices.select_shipment')} value={selectedShipment} onChange={(e) => {
-          const val = e.target.value;
-          setSelectedShipment(val);
-          // if this shipment already has an invoice, show immediate error
-          const hasInvoice = existingInvoices.some(inv => String(inv.shipment?.id) === String(val));
-          if (hasInvoice) {
-            setErrors((prev) => ({ ...prev, shipment_id: ['Cet enregistrement existe déjà (valeur unique en doublon).'] }));
-          } else {
-            setErrors((prev) => {
-              const copy = { ...prev };
-              delete copy.shipment_id;
-              return copy;
-            });
-          }
+          setSelectedShipment(e.target.value);
+          setErrors((prev) => {
+            if (!prev.shipment_id) return prev;
+            const copy = { ...prev };
+            delete copy.shipment_id;
+            return copy;
+          });
         }} error={errors.shipment_id?.[0]} required>
           <option value="">{t('common.select')}</option>
           {shipments.map((s) => <option key={s.id} value={s.id}>{s.tracking_number} - {s.client?.name}{s.container_code ? ` (${s.container_code})` : ''}</option>)}
@@ -513,6 +512,134 @@ function InvoiceFormModal({ onClose, onSaved }) {
   );
 }
 
+function InvoiceEditModal({ invoice, onClose, onSaved }) {
+  const { t } = useTranslation();
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [magerwa, setMagerwa] = useState(invoice.magerwa_price ? String(invoice.magerwa_price) : '');
+  const [auxFees, setAuxFees] = useState(
+    Array.isArray(invoice.auxiliary_fees) && invoice.auxiliary_fees.length
+      ? invoice.auxiliary_fees.map((f) => ({ label: f.label || '', amount: String(f.amount ?? '') }))
+      : [{ label: '', amount: '' }]
+  );
+  const [cashAdvanceAmount, setCashAdvanceAmount] = useState(
+    invoice.cash_advance_amount ? String(invoice.cash_advance_amount) : ''
+  );
+  const [dueDate, setDueDate] = useState(
+    invoice.due_date ? String(invoice.due_date).slice(0, 10) : ''
+  );
+  const [notes, setNotes] = useState(invoice.notes || '');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrors({});
+    try {
+      const auxiliary_fees = auxFees
+        .filter((f) => f.label?.trim() && f.amount !== '' && !Number.isNaN(parseFloat(f.amount)))
+        .map((f) => ({ label: f.label.trim(), amount: parseFloat(f.amount) }));
+
+      const payload = {
+        magerwa_price: magerwa === '' ? 0 : parseFloat(magerwa),
+        auxiliary_fees,
+        cash_advance_amount: cashAdvanceAmount === '' ? 0 : parseFloat(cashAdvanceAmount),
+        due_date: dueDate,
+        notes: notes || null,
+      };
+
+      await api.put(`/invoices/${invoice.id}`, payload);
+      toast.success(t('common.saved'));
+      onSaved();
+    } catch (err) {
+      if (err.response?.status === 422) setErrors(err.response.data.errors || {});
+      else toast.error(err.response?.data?.message || t('common.error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title={`Modifier ${invoice.invoice_number}`} size="lg">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Input
+          label={t('invoices.magerwa') + ' ($)'}
+          type="number"
+          step="0.01"
+          min="0"
+          value={magerwa}
+          onChange={(e) => setMagerwa(e.target.value)}
+          error={errors.magerwa_price?.[0]}
+        />
+
+        <div className="space-y-2">
+          <div className="text-sm font-medium text-gray-700">{t('invoices.auxiliary_fee')}</div>
+          {auxFees.map((row, idx) => (
+            <div key={idx} className="flex gap-2">
+              <Input
+                className="flex-1"
+                placeholder={t('invoices.description')}
+                value={row.label}
+                onChange={(e) => setAuxFees((p) => p.map((r, i) => (i === idx ? { ...r, label: e.target.value } : r)))}
+              />
+              <Input
+                type="number"
+                step="0.01"
+                className="w-28"
+                placeholder="$"
+                value={row.amount}
+                onChange={(e) => setAuxFees((p) => p.map((r, i) => (i === idx ? { ...r, amount: e.target.value } : r)))}
+              />
+              <button type="button" className="text-red-500 px-2" onClick={() => setAuxFees((p) => p.filter((_, i) => i !== idx))}>×</button>
+            </div>
+          ))}
+          <Button type="button" size="sm" variant="secondary" onClick={() => setAuxFees((p) => [...p, { label: '', amount: '' }])}>
+            {t('invoices.add_auxiliary_fee')}
+          </Button>
+        </div>
+
+        <Input
+          label={t('invoices.cash_advance') + ' ($)'}
+          type="number"
+          step="0.01"
+          min="0"
+          value={cashAdvanceAmount}
+          onChange={(e) => setCashAdvanceAmount(e.target.value)}
+          error={errors.cash_advance_amount?.[0]}
+          disabled={!invoice.cash_advance_id}
+          placeholder={!invoice.cash_advance_id ? t('invoices.no_cash_advance') : t('invoices.optional_amount')}
+        />
+
+        <div className="grid grid-cols-2 gap-3">
+          <Input
+            label={t('invoices.due_date')}
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            error={errors.due_date?.[0]}
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-600 mb-1">Notes</label>
+          <textarea
+            className="form-textarea w-full"
+            rows={3}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+          {errors.notes?.[0] && <p className="mt-1 text-xs text-red-500">{errors.notes[0]}</p>}
+        </div>
+
+        <div className="flex justify-end gap-3 pt-2">
+          <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button type="submit" loading={loading}>{t('common.save')}</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 function InvoicePayModal({ invoice, onClose, onSaved }) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
@@ -609,24 +736,6 @@ function InvoiceDetailModal({ invoice: invoiceProp, onClose, onDownload, onWhats
           <div><span className="text-gray-500">Statut:</span> <span className="font-medium">{invoice.status}</span></div>
         </div>
 
-        {Number(invoice.magerwa_price || 0) > 0 && (
-          <div className="text-sm text-gray-700">{t('invoices.magerwa')}: <span className="font-medium">{formatMoney(invoice.magerwa_price)}</span></div>
-        )}
-        {(invoice.auxiliary_fees || []).length > 0 && (
-          <div className="text-sm space-y-1">
-            <div className="text-gray-500">{t('invoices.auxiliary_fee')}</div>
-            {invoice.auxiliary_fees.map((f, i) => (
-              <div key={i}>{f.label}: {formatMoney(f.amount)}</div>
-            ))}
-          </div>
-        )}
-        {Number(invoice.cash_advance_amount || 0) > 0 && (
-          <div className="text-sm text-orange-700">
-            {t('invoices.cash_advance')}: -{formatMoney(invoice.cash_advance_amount)}
-            {invoice.cash_advance?.reference && <span className="text-gray-500"> ({invoice.cash_advance.reference})</span>}
-          </div>
-        )}
-
         {invoice.items && invoice.items.length > 0 && (
           <div className="border rounded-lg overflow-hidden">
             <table className="w-full text-sm">
@@ -648,12 +757,33 @@ function InvoiceDetailModal({ invoice: invoiceProp, onClose, onDownload, onWhats
                   </tr>
                 ))}
               </tbody>
-              <tfoot className="bg-gray-50 font-bold">
-                <tr>
+              <tfoot className="bg-gray-50">
+                <tr className="font-medium">
                   <td colSpan="3" className="px-4 py-2 text-right">{t('invoices.subtotal')}</td>
                   <td className="px-4 py-2 text-right">{formatMoney(invoice.subtotal)}</td>
                 </tr>
-                <tr>
+                {Number(invoice.magerwa_price || 0) > 0 && (
+                  <tr>
+                    <td colSpan="3" className="px-4 py-2 text-right">{t('invoices.magerwa')}</td>
+                    <td className="px-4 py-2 text-right">{formatMoney(invoice.magerwa_price)}</td>
+                  </tr>
+                )}
+                {(invoice.auxiliary_fees || []).map((f, i) => (
+                  <tr key={`aux-${i}`}>
+                    <td colSpan="3" className="px-4 py-2 text-right">{f.label}</td>
+                    <td className="px-4 py-2 text-right">{formatMoney(f.amount)}</td>
+                  </tr>
+                ))}
+                {Number(invoice.cash_advance_amount || 0) > 0 && (
+                  <tr className="text-orange-700">
+                    <td colSpan="3" className="px-4 py-2 text-right">
+                      {t('invoices.cash_advance')}
+                      {invoice.cash_advance?.reference && <span className="text-gray-500"> ({invoice.cash_advance.reference})</span>}
+                    </td>
+                    <td className="px-4 py-2 text-right">-{formatMoney(invoice.cash_advance_amount)}</td>
+                  </tr>
+                )}
+                <tr className="font-bold border-t-2 border-gray-300">
                   <td colSpan="3" className="px-4 py-2 text-right">Total</td>
                   <td className="px-4 py-2 text-right">{formatMoney(invoice.total)}</td>
                 </tr>
