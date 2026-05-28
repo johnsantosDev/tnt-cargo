@@ -542,6 +542,7 @@
     "total_amount": "物品总计",
     "items_total": "物品总计",
     "price_per_cbm": "每CBM价格",
+    "price_per_cbm_required": "必须填写每CBM价格（必须大于0）。",
     "shipping_cost": "运费",
     "grand_total": "总计",
     "date": "日期",

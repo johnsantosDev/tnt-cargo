@@ -1618,13 +1618,14 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
 
           <div className="pt-2 border-t border-blue-200">
             <label className="text-xs text-gray-600 font-medium block mb-1">
-              {t('packing_list.price_per_cbm')} ($)
+              {t('packing_list.price_per_cbm')} ($) <span className="text-red-500">*</span>
             </label>
             <div className="flex items-center gap-2">
               <input
                 type="number"
                 step="0.01"
-                min="0"
+                min="0.01"
+                required
                 value={globalPricePerCbm}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -1633,12 +1634,15 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
                   }
                 }}
                 placeholder="0.00"
-                className="w-32 px-2 py-1 border rounded text-sm text-right bg-white"
+                className={`w-32 px-2 py-1 border rounded text-sm text-right bg-white ${pricePerCbmNum <= 0 ? 'border-red-400' : ''}`}
               />
               <span className="text-xs text-gray-500">
                 × {totals.totalCbm.toFixed(4)} CBM = <span className="font-semibold text-blue-700">{formatMoney(totals.totalShipping)}</span>
               </span>
             </div>
+            {pricePerCbmNum <= 0 && (
+              <p className="mt-1 text-xs text-red-600">{t('packing_list.price_per_cbm_required')}</p>
+            )}
           </div>
 
           <div className="pt-2 border-t border-blue-200 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
@@ -1931,6 +1935,14 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
           <Button onClick={() => {
+            // Guard: the global price-per-CBM must be set. Without it, the resulting
+            // shipment would have shipping_cost = 0 and the linked packing lists
+            // would keep a stale/zero price_per_cbm, which is what the user reported.
+            if (pricePerCbmNum <= 0) {
+              toast.error(t('packing_list.price_per_cbm_required'));
+              return;
+            }
+
             const formattedItemUpdates = Object.entries(itemUpdates)
               .filter(([, updates]) => Object.keys(updates).length > 0)
               .map(([id, updates]) => {
@@ -1944,18 +1956,17 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
             // Merge: global price-per-CBM applied to every PL, plus any inline header_cbm / weight edits.
             // PLs whose additional_fees were auto-moved to the aux fees section need to be zeroed
             // to avoid double-counting on the shipment total.
-            const hasGlobalPrice = globalPricePerCbm !== '' && !isNaN(parseFloat(globalPricePerCbm));
             const formattedPlUpdates = packingLists
               .map(pl => {
                 const u = plUpdates[pl.id] || {};
-                const out = { id: parseInt(pl.id, 10) };
-                if (hasGlobalPrice) out.price_per_cbm = Number(globalPricePerCbm);
+                // price_per_cbm is now guaranteed > 0 by the guard above and always
+                // sent so it persists onto every packing list linked to this shipment.
+                const out = { id: parseInt(pl.id, 10), price_per_cbm: pricePerCbmNum };
                 if (u.header_cbm !== undefined && u.header_cbm !== '') out.header_cbm = Number(u.header_cbm);
                 if (u.gross_weight_kg !== undefined && u.gross_weight_kg !== '') out.gross_weight_kg = Number(u.gross_weight_kg);
                 if (Number(pl.additional_fees || 0) > 0) out.additional_fees = 0;
                 return out;
-              })
-              .filter(u => Object.keys(u).length > 1); // keep only entries with at least one real field beyond id
+              });
             const cleanAuxiliaryFees = auxiliaryFees
               .filter(f => Number(f.amount) > 0 && (f.description || '').trim() !== '')
               .map(f => ({ description: f.description, amount: Number(f.amount) }));
@@ -1965,7 +1976,7 @@ function CreateShipmentFromPLsModal({ packingLists, onClose, onSubmit, loading }
               pl_updates: formattedPlUpdates,
               auxiliary_fees: cleanAuxiliaryFees,
             });
-          }} disabled={loading}>
+          }} disabled={loading || pricePerCbmNum <= 0}>
             <Truck className="w-4 h-4 mr-2" />
             {loading ? t('common.saving') : t('packing_list.create_shipment')}
           </Button>

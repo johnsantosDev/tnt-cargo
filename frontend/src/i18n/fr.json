@@ -586,6 +586,7 @@
     "total_amount": "Total Articles",
     "items_total": "Total Articles",
     "price_per_cbm": "Prix par CBM",
+    "price_per_cbm_required": "Le prix par CBM est requis (doit être supérieur à 0).",
     "shipping_cost": "Frais d'expédition",
     "grand_total": "Total Général",
     "date": "Date",

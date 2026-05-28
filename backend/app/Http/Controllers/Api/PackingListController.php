@@ -491,6 +491,18 @@ class PackingListController extends Controller
                 $packingList->recalculateTotals();
                 $packingList->refresh()->load('items');
 
+                // Hard requirement: the packing list contributing to this shipment must
+                // have a non-zero price_per_cbm, otherwise the resulting shipment would
+                // ship with shipping_cost = 0 and the PL would remain in a stale state.
+                if ((float) $packingList->price_per_cbm <= 0) {
+                    return response()->json([
+                        'message' => "Le prix par CBM est requis avant de générer l'expédition (liste {$packingList->reference}).",
+                        'errors' => [
+                            'price_per_cbm' => ['Le prix par CBM doit être supérieur à 0.'],
+                        ],
+                    ], 422);
+                }
+
                 $itemDescriptions = $packingList->items->pluck('description')->implode(', ');
                 $description = mb_substr($itemDescriptions, 0, 500);
 
@@ -590,6 +602,15 @@ class PackingListController extends Controller
 
         if ($items->count() !== count($validated['item_ids'])) {
             return response()->json(['message' => 'Certains articles ne font pas partie de cette packing list.'], 422);
+        }
+
+        if ((float) $packingList->price_per_cbm <= 0) {
+            return response()->json([
+                'message' => "Le prix par CBM est requis sur la liste {$packingList->reference} avant de générer l'expédition.",
+                'errors' => [
+                    'price_per_cbm' => ['Le prix par CBM doit être supérieur à 0.'],
+                ],
+            ], 422);
         }
 
         $totalCbm = $items->sum(fn($i) => $i->cbm * $i->quantity);
@@ -774,6 +795,20 @@ class PackingListController extends Controller
                 $packingLists = PackingList::with('items')
                     ->whereIn('id', $validated['packing_list_ids'])
                     ->get();
+
+                // Hard requirement: every contributing packing list must have a non-zero
+                // price_per_cbm at this point — either it was already set, or the request's
+                // pl_updates supplied one. Without this, the shipment's shipping_cost would
+                // be 0 and the PLs would be linked with stale (zero) pricing.
+                $listsMissingPrice = $packingLists->filter(fn ($pl) => (float) $pl->price_per_cbm <= 0);
+                if ($listsMissingPrice->isNotEmpty()) {
+                    return response()->json([
+                        'message' => "Le prix par CBM est requis pour: " . $listsMissingPrice->pluck('reference')->implode(', '),
+                        'errors' => [
+                            'price_per_cbm' => ['Le prix par CBM doit être supérieur à 0 pour toutes les listes.'],
+                        ],
+                    ], 422);
+                }
 
                 $totalCbm = $packingLists->sum('total_cbm');
                 $totalWeight = $packingLists->sum('total_weight');
