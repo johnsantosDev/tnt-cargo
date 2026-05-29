@@ -69,8 +69,47 @@ class ReportController extends Controller
     private function exportPdf(string $view, array $data, string $filename)
     {
         $timestamp = now()->format('dmYHis');
-        $pdf = Pdf::loadView($view, $data)->setPaper('a4', 'landscape');
-        return $pdf->download("{$filename}-{$timestamp}.pdf");
+
+        try {
+            // Force a fresh compile of the target blade. Without this, a deploy
+            // that updates a blade file but doesn't clear storage/framework/views
+            // can keep serving an old (potentially broken) compiled view —
+            // exactly what bit us when an inline @endif@endforeach pattern in
+            // containers-detail.blade.php silently failed in production while
+            // local tests were green. Cheap insurance against future blade edits.
+            $this->bustCompiledView($view);
+
+            $pdf = Pdf::loadView($view, $data)->setPaper('a4', 'landscape');
+            return $pdf->download("{$filename}-{$timestamp}.pdf");
+        } catch (\Throwable $e) {
+            \Log::error('PDF report rendering failed', [
+                'view' => $view,
+                'filename' => $filename,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            return response()->json([
+                'message' => 'Erreur lors de la génération du PDF: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function bustCompiledView(string $view): void
+    {
+        try {
+            $resolved = view($view)->getPath();
+            $compiledPath = app('view.engine.resolver')
+                ->resolve('blade')
+                ->getCompiler()
+                ->getCompiledPath($resolved);
+            if ($compiledPath && is_file($compiledPath)) {
+                @unlink($compiledPath);
+            }
+        } catch (\Throwable $e) {
+            // Best effort — if path resolution fails, fall back to Laravel's
+            // default mtime check (which is usually correct).
+        }
     }
 
     public function financial(Request $request)

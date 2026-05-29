@@ -148,7 +148,13 @@
                             <span class="sep">·</span>
                             <span class="lbl">Frais auxiliaires:</span> <strong>${{ number_format($s['invoice']['auxiliary_fees_total'], 2, ',', ' ') }}</strong>
                             @if(!empty($s['invoice']['auxiliary_fees']) && count($s['invoice']['auxiliary_fees']) > 0)
-                                <span class="gray">(@foreach($s['invoice']['auxiliary_fees'] as $i => $af){{ $af['label'] }}: ${{ number_format($af['amount'], 2, ',', ' ') }}@if(!$loop->last), @endif@endforeach)</span>
+                                @php
+                                    $auxParts = [];
+                                    foreach ($s['invoice']['auxiliary_fees'] as $af) {
+                                        $auxParts[] = $af['label'] . ': $' . number_format($af['amount'], 2, ',', ' ');
+                                    }
+                                @endphp
+                                <span class="gray">({{ implode(', ', $auxParts) }})</span>
                             @endif
                             @if($s['invoice']['cash_advance_amount'] > 0)
                                 <span class="sep">·</span>
