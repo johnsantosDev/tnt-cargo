@@ -168,6 +168,11 @@ class Shipment extends Model
         }
 
         $this->calculateTotalCost();
+        // Persist so the shipments list, invoices and any downstream consumer
+        // see the freshly recomputed totals — without this, callers like
+        // PackingListController::syncShipment compute new totals but never
+        // write them back, and the shipment row stays stale.
+        $this->save();
     }
 
     public function calculateWarehouseFee(): void

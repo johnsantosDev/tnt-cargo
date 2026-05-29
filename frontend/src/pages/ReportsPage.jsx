@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
@@ -23,6 +23,9 @@ export default function ReportsPage() {
   const [endDate, setEndDate] = useState('');
   const [useCustomDates, setUseCustomDates] = useState(false);
   const [region, setRegion] = useState('');
+  // Containers-tab specific filters
+  const [selectedContainer, setSelectedContainer] = useState('');
+  const [detailedContainer, setDetailedContainer] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -32,13 +35,27 @@ export default function ReportsPage() {
       ? { start_date: startDate, end_date: endDate, group_by: groupBy }
       : { period, group_by: groupBy };
     if (region) params.region = region;
+    if (activeTab === 'containers') {
+      if (selectedContainer) params.container_code = selectedContainer;
+      if (detailedContainer) params.detailed = 1;
+    }
     api.get(`/reports/${activeTab}`, { params })
       .then(({ data }) => setData(data))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [activeTab, period, groupBy, startDate, endDate, useCustomDates, region]);
+  }, [activeTab, period, groupBy, startDate, endDate, useCustomDates, region, selectedContainer, detailedContainer]);
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
+
+  const handleTabChange = (key) => {
+    // Reset container-specific filters when leaving the tab so they don't leak
+    // into a follow-up containers visit with stale state.
+    if (activeTab === 'containers' && key !== 'containers') {
+      setSelectedContainer('');
+      setDetailedContainer(false);
+    }
+    setActiveTab(key);
+  };
 
   const formatMoney = (v) => `$${Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`;
 
@@ -58,11 +75,18 @@ export default function ReportsPage() {
         ? { start_date: startDate, end_date: endDate, export: format }
         : { period, export: format };
       if (region) params.region = region;
+      if (activeTab === 'containers') {
+        if (selectedContainer) params.container_code = selectedContainer;
+        if (detailedContainer) params.detailed = 1;
+      }
       const response = await api.get(`/reports/${activeTab}`, { params, responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `rapport-${activeTab}-${period}.${format === 'excel' ? 'xlsx' : format}`);
+      const slug = activeTab === 'containers' && selectedContainer
+        ? `container-${selectedContainer.replace(/[^A-Za-z0-9]/g, '_')}`
+        : `${activeTab}-${period}`;
+      link.setAttribute('download', `rapport-${slug}.${format === 'excel' ? 'xlsx' : format}`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -136,7 +160,7 @@ export default function ReportsPage() {
         {tabs.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
-            onClick={() => setActiveTab(key)}
+            onClick={() => handleTabChange(key)}
             className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors whitespace-nowrap ${activeTab === key ? 'bg-white shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700'}`}
           >
             <Icon className="w-4 h-4" />{label}
@@ -154,7 +178,17 @@ export default function ReportsPage() {
           {activeTab === 'cash-advances' && <CashAdvancesReport data={data} formatMoney={formatMoney} t={t} />}
           {activeTab === 'flight-tickets' && <FlightTicketsReport data={data} formatMoney={formatMoney} t={t} />}
           {activeTab === 'transfers' && <TransfersReport data={data} formatMoney={formatMoney} t={t} />}
-          {activeTab === 'containers' && <ContainersReport data={data} formatMoney={formatMoney} t={t} />}
+          {activeTab === 'containers' && (
+            <ContainersReport
+              data={data}
+              formatMoney={formatMoney}
+              t={t}
+              selectedContainer={selectedContainer}
+              onContainerChange={setSelectedContainer}
+              detailed={detailedContainer}
+              onDetailedChange={setDetailedContainer}
+            />
+          )}
         </>
       )}
     </div>
@@ -463,57 +497,246 @@ function TransfersReport({ data, formatMoney, t }) {
   );
 }
 
-function ContainersReport({ data, formatMoney, t }) {
+function ContainersReport({ data, formatMoney, t, selectedContainer, onContainerChange, detailed, onDetailedChange }) {
   if (!data) return null;
-  const { summary, containers } = data;
+  const { summary, containers, containers_list, shipments } = data;
+  const isDetail = !!selectedContainer;
+
+  const paymentBadge = (status) => {
+    const map = {
+      paid: 'bg-emerald-100 text-emerald-700',
+      partial: 'bg-amber-100 text-amber-700',
+      unpaid: 'bg-red-100 text-red-700',
+      unbilled: 'bg-gray-100 text-gray-600',
+    };
+    const labels = {
+      paid: t('reports.payment_paid'),
+      partial: t('reports.payment_partial'),
+      unpaid: t('reports.payment_unpaid'),
+      unbilled: t('reports.payment_unbilled'),
+    };
+    return (
+      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${map[status] || 'bg-gray-100 text-gray-600'}`}>
+        {labels[status] || status}
+      </span>
+    );
+  };
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: t('reports.total_containers'), value: summary?.total_containers, color: 'text-blue-600' },
-          { label: t('reports.total_revenue'), value: formatMoney(summary?.total_revenue), color: 'text-green-600' },
-          { label: t('reports.total_expenses'), value: formatMoney(summary?.total_expenses), color: 'text-red-600' },
-          { label: t('reports.net_profit'), value: formatMoney(summary?.total_profit), color: 'text-purple-600' },
-        ].map((item, i) => (
-          <Card key={i}><CardBody className="text-center"><p className="text-sm text-gray-500">{item.label}</p><p className={`text-2xl font-bold mt-1 ${item.color}`}>{item.value}</p></CardBody></Card>
-        ))}
-      </div>
+      {/* Filter bar */}
       <Card>
-        <CardHeader><h3 className="font-semibold">{t('reports.containers')}</h3></CardHeader>
-        <CardBody className="p-0 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="text-left px-5 py-3 font-medium text-gray-500">{t('shipments.container_code')}</th>
-                <th className="text-right px-5 py-3 font-medium text-gray-500">{t('reports.total_shipments')}</th>
-                <th className="text-right px-5 py-3 font-medium text-gray-500">{t('reports.total_revenue')}</th>
-                <th className="text-right px-5 py-3 font-medium text-gray-500">{t('reports.total_expenses')}</th>
-                <th className="text-right px-5 py-3 font-medium text-gray-500">{t('reports.net_profit')}</th>
-                <th className="text-right px-5 py-3 font-medium text-gray-500">{t('reports.margin')}</th>
-                <th className="text-right px-5 py-3 font-medium text-gray-500">{t('shipments.weight')}</th>
-                <th className="text-right px-5 py-3 font-medium text-gray-500">{t('shipments.cbm')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {(containers || []).map((c, i) => (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-5 py-3 font-medium">{c.container_number}</td>
-                  <td className="px-5 py-3 text-right">{c.shipment_count}</td>
-                  <td className="px-5 py-3 text-right text-green-600 font-medium">{formatMoney(c.revenue)}</td>
-                  <td className="px-5 py-3 text-right text-red-600">{formatMoney(c.expenses)}</td>
-                  <td className="px-5 py-3 text-right font-bold">{formatMoney(c.profit)}</td>
-                  <td className="px-5 py-3 text-right">{c.margin}%</td>
-                  <td className="px-5 py-3 text-right">{Number(c.total_weight || 0).toLocaleString()}</td>
-                  <td className="px-5 py-3 text-right">{Number(c.total_cbm || 0).toFixed(2)}</td>
-                </tr>
-              ))}
-              {(!containers || containers.length === 0) && (
-                <tr><td colSpan={8} className="px-5 py-8 text-center text-gray-400">{t('common.no_data')}</td></tr>
-              )}
-            </tbody>
-          </table>
+        <CardBody>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-[260px]">
+              <label className="block text-xs font-medium text-gray-600 mb-1">{t('reports.select_container')}</label>
+              <Select value={selectedContainer} onChange={(e) => onContainerChange(e.target.value)}>
+                <option value="">{t('reports.all_containers')}</option>
+                {(containers_list || []).map((code) => (
+                  <option key={code} value={code}>{code}</option>
+                ))}
+              </Select>
+            </div>
+            <label className="inline-flex items-center gap-2 pb-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={detailed}
+                onChange={(e) => onDetailedChange(e.target.checked)}
+                disabled={!selectedContainer}
+                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span className="text-sm text-gray-700">{t('reports.detailed_report')}</span>
+              <span className="text-xs text-gray-400">({t('reports.detailed_report_hint')})</span>
+            </label>
+          </div>
         </CardBody>
       </Card>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {isDetail
+          ? [
+              { label: t('reports.total_billed'), value: formatMoney(summary?.total_billed), color: 'text-blue-600' },
+              { label: t('reports.total_revenue'), value: formatMoney(summary?.total_revenue), color: 'text-green-600' },
+              { label: t('reports.total_outstanding'), value: formatMoney(summary?.total_outstanding), color: 'text-red-600' },
+              { label: t('reports.total_expenses'), value: formatMoney(summary?.total_expenses), color: 'text-amber-600' },
+              { label: t('reports.net_profit'), value: formatMoney(summary?.total_profit), color: 'text-purple-600' },
+            ].map((item, i) => (
+              <Card key={i}><CardBody className="text-center"><p className="text-sm text-gray-500">{item.label}</p><p className={`text-2xl font-bold mt-1 ${item.color}`}>{item.value}</p></CardBody></Card>
+            ))
+          : [
+              { label: t('reports.total_containers'), value: summary?.total_containers, color: 'text-blue-600' },
+              { label: t('reports.total_revenue'), value: formatMoney(summary?.total_revenue), color: 'text-green-600' },
+              { label: t('reports.total_expenses'), value: formatMoney(summary?.total_expenses), color: 'text-red-600' },
+              { label: t('reports.net_profit'), value: formatMoney(summary?.total_profit), color: 'text-purple-600' },
+            ].map((item, i) => (
+              <Card key={i}><CardBody className="text-center"><p className="text-sm text-gray-500">{item.label}</p><p className={`text-2xl font-bold mt-1 ${item.color}`}>{item.value}</p></CardBody></Card>
+            ))}
+      </div>
+
+      {/* Detail view: shipments-in-container */}
+      {isDetail ? (
+        <Card>
+          <CardHeader>
+            <h3 className="font-semibold">
+              {t('reports.container')} <span className="font-mono text-indigo-600">{selectedContainer}</span>
+              <span className="ml-2 text-sm text-gray-500">({(shipments || []).length} {t('reports.total_shipments').toLowerCase()})</span>
+            </h3>
+          </CardHeader>
+          <CardBody className="p-0 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">{t('shipments.tracking_number')}</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">{t('shipments.client')}</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">{t('shipments.status')}</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-500">{t('shipments.weight')}</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-500">CBM</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-500">{t('reports.total_billed')}</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-500">{t('invoices.paid')}</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-500">{t('invoices.balance')}</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">{t('invoices.number')}</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">{t('reports.payment_status')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {(shipments || []).map((s) => (
+                  <Fragment key={s.id}>
+                    <tr className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div className="font-mono text-xs font-medium">{s.tracking_number}</div>
+                        <div className="text-xs text-gray-400">{s.origin} → {s.destination}</div>
+                      </td>
+                      <td className="px-4 py-3">{s.client || '—'}</td>
+                      <td className="px-4 py-3">{s.status || '—'}</td>
+                      <td className="px-4 py-3 text-right">{Number(s.weight || 0).toFixed(2)} kg</td>
+                      <td className="px-4 py-3 text-right">{Number(s.volume || 0).toFixed(4)}</td>
+                      <td className="px-4 py-3 text-right font-medium">{formatMoney(s.total_cost)}</td>
+                      <td className="px-4 py-3 text-right text-green-600">{formatMoney(s.amount_paid)}</td>
+                      <td className={`px-4 py-3 text-right ${s.balance_due > 0 ? 'text-red-600 font-medium' : 'text-gray-400'}`}>{formatMoney(s.balance_due)}</td>
+                      <td className="px-4 py-3">
+                        {s.invoice ? (
+                          <div>
+                            <div className="font-mono text-xs">{s.invoice.invoice_number}</div>
+                            <div className="text-xs text-gray-400">{s.invoice.status}</div>
+                          </div>
+                        ) : <span className="text-gray-400">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        {paymentBadge(s.payment_status)}
+                        {s.last_payment_date && <div className="text-xs text-gray-400 mt-1">{new Date(s.last_payment_date).toLocaleDateString('fr-FR')}</div>}
+                      </td>
+                    </tr>
+                    {s.invoice && (
+                      <tr className="bg-blue-50/40">
+                        <td colSpan={10} className="px-4 py-2">
+                          <div className="text-xs font-semibold text-blue-700 mb-1.5">
+                            {t('reports.invoice_breakdown')} — <span className="font-mono">{s.invoice.invoice_number}</span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                            <span><span className="text-gray-500">{t('reports.expedition_fees')}:</span> <span className="font-medium">{formatMoney(s.invoice.subtotal)}</span></span>
+                            <span><span className="text-gray-500">{t('invoices.magerwa')}:</span> <span className={`font-medium ${s.invoice.magerwa_price > 0 ? '' : 'text-gray-400'}`}>{formatMoney(s.invoice.magerwa_price)}</span></span>
+                            <span>
+                              <span className="text-gray-500">{t('invoices.auxiliary_fee')}:</span> <span className={`font-medium ${s.invoice.auxiliary_fees_total > 0 ? '' : 'text-gray-400'}`}>{formatMoney(s.invoice.auxiliary_fees_total)}</span>
+                              {Array.isArray(s.invoice.auxiliary_fees) && s.invoice.auxiliary_fees.length > 0 && (
+                                <span className="text-gray-400"> ({s.invoice.auxiliary_fees.map((f) => `${f.label}: ${formatMoney(f.amount)}`).join(', ')})</span>
+                              )}
+                            </span>
+                            {s.invoice.cash_advance_amount > 0 && (
+                              <span><span className="text-gray-500">{t('invoices.cash_advance')}:</span> <span className="font-medium text-orange-700">-{formatMoney(s.invoice.cash_advance_amount)}</span></span>
+                            )}
+                            <span className="ml-auto"><span className="text-gray-500">Total:</span> <span className="font-bold text-blue-700">{formatMoney(s.invoice.total)}</span></span>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {detailed && s.packing_lists && s.packing_lists.length > 0 && (
+                      <tr className="bg-indigo-50/40">
+                        <td colSpan={10} className="px-4 py-3">
+                          <div className="text-xs font-semibold text-indigo-700 mb-2">
+                            {t('reports.packing_lists')} ({s.packing_lists.length})
+                          </div>
+                          <div className="space-y-1.5">
+                            {s.packing_lists.map((pl) => (
+                              <div key={pl.id} className="text-xs bg-white border border-indigo-100 rounded px-3 py-1.5 space-y-1">
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                  <span className="font-mono font-semibold text-indigo-700">{pl.reference}</span>
+                                  <span className="text-gray-500">{pl.parcel_count} colis · {Number(pl.total_cbm).toFixed(4)} CBM · {Number(pl.total_weight).toFixed(2)} kg</span>
+                                  {pl.price_per_cbm > 0 && <span className="text-gray-500">· ${Number(pl.price_per_cbm).toFixed(2)}/CBM</span>}
+                                  <span className="text-gray-500">· {pl.item_count} {t('packing_list.items_count').toLowerCase()}</span>
+                                  <span className="text-gray-700">· {t('packing_list.shipping_cost')}: {formatMoney(pl.shipping_cost)}</span>
+                                  {pl.additional_fees > 0 && <span className="text-gray-700">+ {formatMoney(pl.additional_fees)} {t('packing_list.additional_fees') || 'divers'}</span>}
+                                  <span className="text-gray-700">· {t('packing_list.total_amount')}: {formatMoney(pl.total_amount)}</span>
+                                  <span className="ml-auto text-gray-400 capitalize">{pl.status}</span>
+                                </div>
+                                {pl.notes && (
+                                  <div className="text-[11px] text-gray-600 italic border-l-2 border-indigo-200 pl-2">
+                                    <span className="font-medium not-italic text-gray-500">{t('packing_list.notes')}:</span> {pl.notes}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+                {(!shipments || shipments.length === 0) && (
+                  <tr><td colSpan={10} className="px-5 py-8 text-center text-gray-400">{t('common.no_data')}</td></tr>
+                )}
+              </tbody>
+            </table>
+          </CardBody>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader><h3 className="font-semibold">{t('reports.containers')}</h3></CardHeader>
+          <CardBody className="p-0 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left px-5 py-3 font-medium text-gray-500">{t('shipments.container_code')}</th>
+                  <th className="text-right px-5 py-3 font-medium text-gray-500">{t('reports.total_shipments')}</th>
+                  <th className="text-right px-5 py-3 font-medium text-gray-500">{t('reports.total_revenue')}</th>
+                  <th className="text-right px-5 py-3 font-medium text-gray-500">{t('reports.total_expenses')}</th>
+                  <th className="text-right px-5 py-3 font-medium text-gray-500">{t('reports.net_profit')}</th>
+                  <th className="text-right px-5 py-3 font-medium text-gray-500">{t('reports.margin')}</th>
+                  <th className="text-right px-5 py-3 font-medium text-gray-500">{t('shipments.weight')}</th>
+                  <th className="text-right px-5 py-3 font-medium text-gray-500">CBM</th>
+                  <th className="px-5 py-3"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {(containers || []).map((c, i) => (
+                  <tr key={i} className="hover:bg-gray-50">
+                    <td className="px-5 py-3 font-medium font-mono text-xs">{c.container_code}</td>
+                    <td className="px-5 py-3 text-right">{c.shipment_count}</td>
+                    <td className="px-5 py-3 text-right text-green-600 font-medium">{formatMoney(c.revenue)}</td>
+                    <td className="px-5 py-3 text-right text-red-600">{formatMoney(c.expenses)}</td>
+                    <td className="px-5 py-3 text-right font-bold">{formatMoney(c.profit)}</td>
+                    <td className="px-5 py-3 text-right">{c.margin}%</td>
+                    <td className="px-5 py-3 text-right">{Number(c.total_weight || 0).toLocaleString()}</td>
+                    <td className="px-5 py-3 text-right">{Number(c.total_cbm || 0).toFixed(2)}</td>
+                    <td className="px-5 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => onContainerChange(c.container_code)}
+                        className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                      >
+                        {t('reports.view_detail')}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {(!containers || containers.length === 0) && (
+                  <tr><td colSpan={9} className="px-5 py-8 text-center text-gray-400">{t('common.no_data')}</td></tr>
+                )}
+              </tbody>
+            </table>
+          </CardBody>
+        </Card>
+      )}
     </div>
   );
 }

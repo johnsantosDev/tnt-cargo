@@ -599,31 +599,197 @@ class ReportController extends Controller
     {
         [$startDate, $endDate] = $this->getDateRange($request);
 
-        $shipmentsQ = Shipment::whereNotNull('container_number')
-            ->where('container_number', '!=', '')
-            ->whereBetween('created_at', [$startDate, $endDate]);
+        $detailed = $request->boolean('detailed');
+        $containerCode = $request->get('container_code');
+
+        // Always provide the dropdown list so the frontend can populate without
+        // a second request. Distinct across the whole table, filtered by region.
+        $containersListQ = Shipment::whereNotNull('container_code')
+            ->where('container_code', '!=', '');
+        RegionContext::apply($containersListQ, $request);
+        $containersList = $containersListQ
+            ->select('container_code')
+            ->distinct()
+            ->orderBy('container_code')
+            ->pluck('container_code')
+            ->values();
+
+        // Per-container shipment query — date range only applied when no specific
+        // container is requested (a single-container detail view should show the
+        // full history for that container, not a sliced window).
+        $shipmentsQ = Shipment::whereNotNull('container_code')
+            ->where('container_code', '!=', '');
         RegionContext::apply($shipmentsQ, $request);
 
-        $containers = $shipmentsQ
-            ->selectRaw("container_number, COUNT(*) as shipment_count, SUM(COALESCE(amount_paid,0)) as revenue, SUM(COALESCE(customs_fee,0) + COALESCE(shipping_cost,0) + COALESCE(other_fees,0)) as expenses, SUM(COALESCE(weight,0)) as total_weight, SUM(COALESCE(cbm,0)) as total_cbm, MIN(created_at) as first_shipment, MAX(created_at) as last_shipment")
-            ->groupBy('container_number')
+        if ($containerCode) {
+            $shipmentsQ->where('container_code', $containerCode);
+        } else {
+            $shipmentsQ->whereBetween('created_at', [$startDate, $endDate]);
+        }
+
+        // Summary across all containers (or all shipments of selected container).
+        $containers = (clone $shipmentsQ)
+            ->selectRaw('container_code,
+                COUNT(*) as shipment_count,
+                SUM(COALESCE(total_cost, 0)) as billed,
+                SUM(COALESCE(amount_paid, 0)) as revenue,
+                SUM(GREATEST(COALESCE(total_cost, 0) - COALESCE(amount_paid, 0), 0)) as outstanding,
+                SUM(COALESCE(customs_fee, 0) + COALESCE(shipping_cost, 0) + COALESCE(other_fees, 0) + COALESCE(warehouse_fee, 0)) as expenses,
+                SUM(COALESCE(weight, 0)) as total_weight,
+                SUM(COALESCE(volume, 0)) as total_cbm,
+                MIN(created_at) as first_shipment,
+                MAX(created_at) as last_shipment')
+            ->groupBy('container_code')
             ->orderByDesc('last_shipment')
-            ->limit(50)
+            ->limit($containerCode ? null : 50)
             ->get()
             ->map(function ($c) {
-                $c->profit = $c->revenue - $c->expenses;
+                $c->profit = (float) $c->revenue - (float) $c->expenses;
                 $c->margin = $c->revenue > 0 ? round(($c->profit / $c->revenue) * 100, 1) : 0;
                 return $c;
             });
 
         $totalContainers = $containers->count();
-        $totalRevenue = $containers->sum('revenue');
-        $totalExpenses = $containers->sum('expenses');
+        $totalRevenue = (float) $containers->sum('revenue');
+        $totalExpenses = (float) $containers->sum('expenses');
+        $totalBilled = (float) $containers->sum('billed');
+        $totalOutstanding = (float) $containers->sum('outstanding');
         $totalProfit = $totalRevenue - $totalExpenses;
 
+        // When a specific container is selected we also return the per-shipment
+        // detail with invoice and payment status. The `detailed` flag adds the
+        // linked packing lists to each shipment row.
+        $shipments = collect();
+        if ($containerCode) {
+            $relations = ['client', 'status', 'invoice', 'payments'];
+            if ($detailed) {
+                $relations[] = 'packingLists.items';
+            }
+            $shipments = (clone $shipmentsQ)
+                ->with($relations)
+                ->orderBy('created_at')
+                ->get()
+                ->map(function ($s) use ($detailed) {
+                    $invoice = $s->invoice;
+                    $balance = (float) ($s->total_cost ?? 0) - (float) ($s->amount_paid ?? 0);
+
+                    // Invoice breakdown — when an invoice exists, expose the
+                    // four numbers a manager wants to see at a glance: shipment
+                    // fees subtotal, magerwa, auxiliary fees total, and any
+                    // cash advance deducted, plus the resulting invoice total.
+                    $invoicePayload = null;
+                    if ($invoice) {
+                        $auxFees = is_array($invoice->auxiliary_fees) ? $invoice->auxiliary_fees : [];
+                        $auxTotal = collect($auxFees)->sum(fn ($f) => (float) ($f['amount'] ?? 0));
+                        $invoicePayload = [
+                            'id' => $invoice->id,
+                            'invoice_number' => $invoice->invoice_number,
+                            'subtotal' => (float) ($invoice->subtotal ?? 0),
+                            'magerwa_price' => (float) ($invoice->magerwa_price ?? 0),
+                            'auxiliary_fees_total' => $auxTotal,
+                            'auxiliary_fees' => collect($auxFees)
+                                ->map(fn ($f) => [
+                                    'label' => (string) ($f['label'] ?? ''),
+                                    'amount' => (float) ($f['amount'] ?? 0),
+                                ])
+                                ->values(),
+                            'cash_advance_amount' => (float) ($invoice->cash_advance_amount ?? 0),
+                            'tax_amount' => (float) ($invoice->tax_amount ?? 0),
+                            'discount_amount' => (float) ($invoice->discount_amount ?? 0),
+                            'total' => (float) $invoice->total,
+                            'amount_paid' => (float) $invoice->amount_paid,
+                            'status' => $invoice->status,
+                            'issue_date' => optional($invoice->issue_date)->toDateString(),
+                        ];
+                    }
+
+                    $row = [
+                        'id' => $s->id,
+                        'tracking_number' => $s->tracking_number,
+                        'client' => $s->client?->name,
+                        'status' => $s->status?->name,
+                        'origin' => $s->origin,
+                        'destination' => $s->destination,
+                        'weight' => (float) ($s->weight ?? 0),
+                        'volume' => (float) ($s->volume ?? 0),
+                        'shipping_cost' => (float) ($s->shipping_cost ?? 0),
+                        'customs_fee' => (float) ($s->customs_fee ?? 0),
+                        'other_fees' => (float) ($s->other_fees ?? 0),
+                        'total_cost' => (float) ($s->total_cost ?? 0),
+                        'amount_paid' => (float) ($s->amount_paid ?? 0),
+                        'balance_due' => max(0, $balance),
+                        'created_at' => optional($s->created_at)->toIso8601String(),
+                        'invoice' => $invoicePayload,
+                        'payment_status' => $this->resolvePaymentStatus($s),
+                        'last_payment_date' => optional($s->payments->sortByDesc('payment_date')->first())->payment_date?->toDateString(),
+                    ];
+                    if ($detailed) {
+                        $row['packing_lists'] = $s->packingLists->map(function ($pl) {
+                            return [
+                                'id' => $pl->id,
+                                'reference' => $pl->reference,
+                                'status' => $pl->status,
+                                'parcel_count' => (int) ($pl->parcel_count ?? 0),
+                                'total_cbm' => (float) ($pl->total_cbm ?? 0),
+                                'total_weight' => (float) ($pl->total_weight ?? 0),
+                                'price_per_cbm' => (float) ($pl->price_per_cbm ?? 0),
+                                'shipping_cost' => (float) ($pl->shipping_cost ?? 0),
+                                'additional_fees' => (float) ($pl->additional_fees ?? 0),
+                                'fees_description' => (string) ($pl->fees_description ?? ''),
+                                'notes' => (string) ($pl->notes ?? ''),
+                                'total_amount' => (float) ($pl->total_amount ?? 0),
+                                'item_count' => $pl->items->count(),
+                            ];
+                        })->values();
+                    }
+                    return $row;
+                });
+        }
+
         if ($request->filled('export')) {
+            $selectedRegion = $request->get('region') ?: 'Toutes les régions';
+            $periodLabel = $request->filled('start_date')
+                ? $request->start_date . ' — ' . $request->end_date
+                : ucfirst($request->get('period', 'month'));
+
+            if ($request->export === 'pdf') {
+                $view = $containerCode ? 'reports.containers-detail' : 'reports.containers';
+                $payload = compact(
+                    'containers', 'totalContainers', 'totalRevenue', 'totalExpenses',
+                    'totalProfit', 'totalBilled', 'totalOutstanding',
+                    'selectedRegion', 'periodLabel', 'containerCode', 'detailed', 'shipments'
+                );
+                return $this->exportPdf($view, $payload, $containerCode ? 'rapport-container-' . preg_replace('/[^A-Za-z0-9]/', '_', $containerCode) : 'rapport-containers');
+            }
+
+            // CSV — detail rows when a container is selected, otherwise the summary table.
+            if ($containerCode) {
+                $rows = $shipments->map(function ($s) {
+                    return [
+                        'Tracking' => $s['tracking_number'],
+                        'Client' => $s['client'],
+                        'Statut' => $s['status'],
+                        'Origine' => $s['origin'],
+                        'Destination' => $s['destination'],
+                        'Poids (kg)' => $s['weight'],
+                        'CBM' => $s['volume'],
+                        'Frais expedition' => $s['shipping_cost'],
+                        'Douane' => $s['customs_fee'],
+                        'Autres frais' => $s['other_fees'],
+                        'Total facture' => $s['total_cost'],
+                        'Paye' => $s['amount_paid'],
+                        'Solde' => $s['balance_due'],
+                        'No facture' => $s['invoice']['invoice_number'] ?? '',
+                        'Statut facture' => $s['invoice']['status'] ?? '',
+                        'Statut paiement' => $s['payment_status'],
+                        'Dernier paiement' => $s['last_payment_date'] ?? '',
+                    ];
+                })->toArray();
+                return $this->exportCsv($rows, 'rapport-container-' . preg_replace('/[^A-Za-z0-9]/', '_', $containerCode));
+            }
+
             $rows = $containers->map(fn($c) => [
-                'Container' => $c->container_number,
+                'Container' => $c->container_code,
                 'Shipments' => $c->shipment_count,
                 'Revenue' => $c->revenue,
                 'Expenses' => $c->expenses,
@@ -632,22 +798,39 @@ class ReportController extends Controller
                 'Weight' => $c->total_weight,
                 'CBM' => $c->total_cbm,
             ])->toArray();
-            if ($request->export === 'pdf') {
-                $selectedRegion = $request->get('region') ?: 'Toutes les régions';
-                $periodLabel = $request->filled('start_date') ? $request->start_date . ' — ' . $request->end_date : ucfirst($request->get('period', 'month'));
-                return $this->exportPdf('reports.containers', compact('containers', 'totalContainers', 'totalRevenue', 'totalExpenses', 'totalProfit', 'selectedRegion', 'periodLabel'), 'rapport-containers');
-            }
             return $this->exportCsv($rows, 'rapport-containers');
         }
 
         return response()->json([
             'summary' => [
                 'total_containers' => $totalContainers,
-                'total_revenue' => (float)$totalRevenue,
-                'total_expenses' => (float)$totalExpenses,
-                'total_profit' => (float)$totalProfit,
+                'total_revenue' => $totalRevenue,
+                'total_expenses' => $totalExpenses,
+                'total_profit' => $totalProfit,
+                'total_billed' => $totalBilled,
+                'total_outstanding' => $totalOutstanding,
             ],
             'containers' => $containers,
+            'containers_list' => $containersList,
+            'selected_container' => $containerCode,
+            'detailed' => $detailed,
+            'shipments' => $shipments,
         ]);
+    }
+
+    private function resolvePaymentStatus(Shipment $shipment): string
+    {
+        $total = (float) ($shipment->total_cost ?? 0);
+        $paid = (float) ($shipment->amount_paid ?? 0);
+        if ($total <= 0) {
+            return 'unbilled';
+        }
+        if ($paid <= 0) {
+            return 'unpaid';
+        }
+        if ($paid + 0.01 < $total) {
+            return 'partial';
+        }
+        return 'paid';
     }
 }

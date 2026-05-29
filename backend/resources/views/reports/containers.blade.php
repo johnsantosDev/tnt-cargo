@@ -85,7 +85,7 @@
         <tbody>
         @foreach($containers as $c)
             <tr>
-                <td><strong>{{ $c->container_number }}</strong></td>
+                <td><strong>{{ $c->container_code }}</strong></td>
                 <td class="text-right">{{ $c->shipment_count }}</td>
                 <td class="text-right green">${{ number_format($c->revenue, 2, ',', ' ') }}</td>
                 <td class="text-right red">${{ number_format($c->expenses, 2, ',', ' ') }}</td>
