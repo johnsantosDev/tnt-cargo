@@ -499,8 +499,10 @@ function TransfersReport({ data, formatMoney, t }) {
 
 function ContainersReport({ data, formatMoney, t, selectedContainer, onContainerChange, detailed, onDetailedChange }) {
   if (!data) return null;
-  const { summary, containers, containers_list, shipments } = data;
+  const { summary, containers, containers_list, shipments, linked_expenses } = data;
   const isDetail = !!selectedContainer;
+  const linkedExpenses = linked_expenses || [];
+  const linkedExpensesTotal = linkedExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
 
   const paymentBadge = (status) => {
     const map = {
@@ -688,6 +690,44 @@ function ContainersReport({ data, formatMoney, t, selectedContainer, onContainer
               </tbody>
             </table>
           </CardBody>
+          {linkedExpenses.length > 0 && (
+            <>
+              <CardHeader>
+                <h3 className="font-semibold">
+                  {t('reports.container_linked_expenses')}
+                  <span className="ml-2 text-sm text-gray-500">({linkedExpenses.length})</span>
+                </h3>
+              </CardHeader>
+              <CardBody className="p-0 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-medium text-gray-500">{t('expenses.reference')}</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-500">{t('expenses.category')}</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-500">{t('expenses.description')}</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-500">{t('expenses.date')}</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-500">{t('expenses.amount')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {linkedExpenses.map((e) => (
+                      <tr key={e.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-mono text-xs">{e.reference}</td>
+                        <td className="px-4 py-3">{e.category}</td>
+                        <td className="px-4 py-3">{e.description}</td>
+                        <td className="px-4 py-3">{e.expense_date ? new Date(e.expense_date).toLocaleDateString('fr-FR') : '—'}</td>
+                        <td className="px-4 py-3 text-right text-red-600 font-medium">{formatMoney(e.amount)}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-gray-50 font-semibold">
+                      <td colSpan={4} className="px-4 py-3 text-right">{t('common.total')}</td>
+                      <td className="px-4 py-3 text-right text-red-700">{formatMoney(linkedExpensesTotal)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </CardBody>
+            </>
+          )}
         </Card>
       ) : (
         <Card>

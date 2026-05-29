@@ -127,10 +127,24 @@ export default function ExpensesPage() {
   );
 }
 
+const CONTAINER_NOTE_PREFIX = 'Container: ';
+
+function parseContainerFromNotes(notes) {
+  if (typeof notes !== 'string') return null;
+  if (!notes.startsWith(CONTAINER_NOTE_PREFIX)) return null;
+  const code = notes.slice(CONTAINER_NOTE_PREFIX.length).trim();
+  return code || null;
+}
+
 function ExpenseFormModal({ data, onClose, onSaved }) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const existingContainer = parseContainerFromNotes(data?.notes);
+  const [linkContainer, setLinkContainer] = useState(!!existingContainer);
+  const [containerSelect, setContainerSelect] = useState(existingContainer || '');
+  const [containerCustom, setContainerCustom] = useState('');
+  const [containerOptions, setContainerOptions] = useState([]);
   const [form, setForm] = useState({
     category: data?.category || '', description: data?.description || '',
     amount: data?.amount || '', expense_date: data?.expense_date?.split('T')[0] || new Date().toISOString().split('T')[0],
@@ -138,13 +152,44 @@ function ExpenseFormModal({ data, onClose, onSaved }) {
   });
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
 
+  useEffect(() => {
+    if (!linkContainer) return;
+    let mounted = true;
+    api.get('/expenses/containers')
+      .then(({ data }) => { if (mounted) setContainerOptions(data?.containers || []); })
+      .catch(() => { if (mounted) setContainerOptions([]); });
+    return () => { mounted = false; };
+  }, [linkContainer]);
+
+  useEffect(() => {
+    if (linkContainer && existingContainer && containerOptions.length > 0) {
+      if (!containerOptions.includes(existingContainer)) {
+        setContainerSelect('__custom__');
+        setContainerCustom(existingContainer);
+      }
+    }
+  }, [linkContainer, existingContainer, containerOptions]);
+
+  const resolvedContainer = linkContainer
+    ? (containerSelect === '__custom__' ? containerCustom.trim() : containerSelect.trim())
+    : '';
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setErrors({});
     try {
-      if (data?.id) await api.put(`/expenses/${data.id}`, form);
-      else await api.post('/expenses', form);
+      const payload = { ...form };
+      if (linkContainer) {
+        if (!resolvedContainer) {
+          setErrors({ notes: [t('expenses.container_required')] });
+          setLoading(false);
+          return;
+        }
+        payload.notes = `${CONTAINER_NOTE_PREFIX}${resolvedContainer}`;
+      }
+      if (data?.id) await api.put(`/expenses/${data.id}`, payload);
+      else await api.post('/expenses', payload);
       onSaved();
       toast.success(t('common.saved'));
     } catch (err) {
@@ -171,7 +216,60 @@ function ExpenseFormModal({ data, onClose, onSaved }) {
           <Input label={t('expenses.amount')} type="number" step="0.01" value={form.amount} onChange={set('amount')} error={errors.amount?.[0]} required />
           <Input label={t('expenses.date')} type="date" value={form.expense_date} onChange={set('expense_date')} />
         </div>
-        <Textarea label={t('common.notes')} value={form.notes} onChange={set('notes')} rows={2} />
+
+        <label className="inline-flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={linkContainer}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setLinkContainer(checked);
+              if (!checked) {
+                setContainerSelect('');
+                setContainerCustom('');
+                if (parseContainerFromNotes(form.notes)) {
+                  setForm((p) => ({ ...p, notes: '' }));
+                }
+              }
+            }}
+            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+          />
+          <span className="text-sm text-gray-700">{t('expenses.link_container')}</span>
+        </label>
+
+        {linkContainer && (
+          <div className="space-y-2 p-3 border border-indigo-100 bg-indigo-50/40 rounded-md">
+            <Select
+              label={t('expenses.select_container')}
+              value={containerSelect}
+              onChange={(e) => setContainerSelect(e.target.value)}
+            >
+              <option value="">{t('common.select')}</option>
+              {containerOptions.map((code) => (
+                <option key={code} value={code}>{code}</option>
+              ))}
+              <option value="__custom__">{t('expenses.container_not_found')}</option>
+            </Select>
+            {containerSelect === '__custom__' && (
+              <Input
+                label={t('expenses.container_custom')}
+                value={containerCustom}
+                onChange={(e) => setContainerCustom(e.target.value)}
+                placeholder={t('expenses.container_custom_placeholder')}
+              />
+            )}
+            {errors.notes?.[0] && <p className="text-xs text-red-600">{errors.notes[0]}</p>}
+          </div>
+        )}
+
+        <Textarea
+          label={t('common.notes')}
+          value={linkContainer ? `${CONTAINER_NOTE_PREFIX}${resolvedContainer}` : form.notes}
+          onChange={set('notes')}
+          rows={2}
+          disabled={linkContainer}
+        />
+
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
           <Button type="submit" loading={loading}>{data ? t('common.save') : t('expenses.create')}</Button>

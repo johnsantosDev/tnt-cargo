@@ -641,6 +641,13 @@ class ReportController extends Controller
         $detailed = $request->boolean('detailed');
         $containerCode = $request->get('container_code');
 
+        // Container-linked expenses live in the expenses table with a notes
+        // field that starts with "Container: <CODE>" (see ExpensesPage). They
+        // are merged into the per-container expense totals so the report
+        // reflects the full cost picture, both summary and detail.
+        $containerNotePrefix = 'Container: ';
+        $prefixLen = strlen($containerNotePrefix);
+
         // Always provide the dropdown list so the frontend can populate without
         // a second request. Distinct across the whole table, filtered by region.
         $containersListQ = Shipment::whereNotNull('container_code')
@@ -681,12 +688,32 @@ class ReportController extends Controller
             ->groupBy('container_code')
             ->orderByDesc('last_shipment')
             ->limit($containerCode ? null : 50)
-            ->get()
-            ->map(function ($c) {
-                $c->profit = (float) $c->revenue - (float) $c->expenses;
-                $c->margin = $c->revenue > 0 ? round(($c->profit / $c->revenue) * 100, 1) : 0;
-                return $c;
-            });
+            ->get();
+
+        // Per-container expense totals from the expenses table — only approved
+        // entries whose notes were tagged with "Container: <CODE>" by the
+        // expense form. Stored as code => sum to merge into the SQL totals.
+        $containerCodes = $containers->pluck('container_code')->filter()->values();
+        $linkedExpensesTotals = collect();
+        if ($containerCodes->isNotEmpty()) {
+            $linkedExpensesQ = Expense::where('status', 'approved')
+                ->where('notes', 'LIKE', $containerNotePrefix . '%')
+                ->whereIn(DB::raw("TRIM(SUBSTRING(notes, " . ($prefixLen + 1) . "))"), $containerCodes->all());
+            RegionContext::apply($linkedExpensesQ, $request);
+            $linkedExpensesTotals = $linkedExpensesQ
+                ->selectRaw("TRIM(SUBSTRING(notes, " . ($prefixLen + 1) . ")) as code, SUM(amount) as total")
+                ->groupBy(DB::raw("TRIM(SUBSTRING(notes, " . ($prefixLen + 1) . "))"))
+                ->pluck('total', 'code');
+        }
+
+        $containers = $containers->map(function ($c) use ($linkedExpensesTotals) {
+            $linked = (float) ($linkedExpensesTotals[$c->container_code] ?? 0);
+            $c->linked_expenses = $linked;
+            $c->expenses = (float) $c->expenses + $linked;
+            $c->profit = (float) $c->revenue - (float) $c->expenses;
+            $c->margin = $c->revenue > 0 ? round(($c->profit / $c->revenue) * 100, 1) : 0;
+            return $c;
+        });
 
         $totalContainers = $containers->count();
         $totalRevenue = (float) $containers->sum('revenue');
@@ -694,6 +721,31 @@ class ReportController extends Controller
         $totalBilled = (float) $containers->sum('billed');
         $totalOutstanding = (float) $containers->sum('outstanding');
         $totalProfit = $totalRevenue - $totalExpenses;
+
+        // Expense entries explicitly linked to the selected container — only
+        // populated for the detail view so the PDF/UI can list each individual
+        // expense, not just the aggregated total.
+        $linkedExpenses = collect();
+        if ($containerCode) {
+            $linkedExpensesListQ = Expense::where('status', 'approved')
+                ->where('notes', 'LIKE', $containerNotePrefix . '%')
+                ->whereRaw('TRIM(SUBSTRING(notes, ?)) = ?', [$prefixLen + 1, $containerCode]);
+            RegionContext::apply($linkedExpensesListQ, $request);
+            $linkedExpenses = $linkedExpensesListQ
+                ->orderByDesc('expense_date')
+                ->get()
+                ->map(function ($e) {
+                    return [
+                        'id' => $e->id,
+                        'reference' => $e->reference,
+                        'category' => $e->category,
+                        'description' => $e->description,
+                        'amount' => (float) $e->amount,
+                        'currency' => $e->currency,
+                        'expense_date' => optional($e->expense_date)->toDateString(),
+                    ];
+                });
+        }
 
         // When a specific container is selected we also return the per-shipment
         // detail with invoice and payment status. The `detailed` flag adds the
@@ -796,7 +848,8 @@ class ReportController extends Controller
                 $payload = compact(
                     'containers', 'totalContainers', 'totalRevenue', 'totalExpenses',
                     'totalProfit', 'totalBilled', 'totalOutstanding',
-                    'selectedRegion', 'periodLabel', 'containerCode', 'detailed', 'shipments'
+                    'selectedRegion', 'periodLabel', 'containerCode', 'detailed', 'shipments',
+                    'linkedExpenses'
                 );
                 return $this->exportPdf($view, $payload, $containerCode ? 'rapport-container-' . preg_replace('/[^A-Za-z0-9]/', '_', $containerCode) : 'rapport-containers');
             }
@@ -854,6 +907,7 @@ class ReportController extends Controller
             'selected_container' => $containerCode,
             'detailed' => $detailed,
             'shipments' => $shipments,
+            'linked_expenses' => $linkedExpenses,
         ]);
     }
 

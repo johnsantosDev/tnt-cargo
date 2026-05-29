@@ -334,7 +334,13 @@
     "pending": "Pending",
     "all_statuses": "All statuses",
     "search_placeholder": "Search by reference, category...",
-    "no_expenses": "No expenses found"
+    "no_expenses": "No expenses found",
+    "link_container": "Linked to a container?",
+    "select_container": "Select container",
+    "container_not_found": "Container not found (enter manually)",
+    "container_custom": "Container code",
+    "container_custom_placeholder": "e.g. CONT-123",
+    "container_required": "Please select or enter a container."
   },
   "cash_advances": {
     "title": "Cash Advances",
@@ -482,7 +488,8 @@
     "payment_unbilled": "Unbilled",
     "packing_lists": "Packing lists",
     "invoice_breakdown": "Invoice breakdown",
-    "expedition_fees": "Shipment fees"
+    "expedition_fees": "Shipment fees",
+    "container_linked_expenses": "Container-linked expenses"
   },
   "settings": {
     "title": "Settings",

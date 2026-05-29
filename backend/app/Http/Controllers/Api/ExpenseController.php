@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Support\RegionContext;
 use App\Models\Expense;
+use App\Models\Shipment;
 use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -74,6 +75,20 @@ class ExpenseController extends Controller
     public function show(Expense $expense): JsonResponse
     {
         return response()->json($expense->load(['approver', 'creator']));
+    }
+
+    public function containers(Request $request): JsonResponse
+    {
+        $query = Shipment::whereNotNull('container_code')->where('container_code', '!=', '');
+        RegionContext::apply($query, $request);
+
+        $codes = $query->select('container_code')
+            ->distinct()
+            ->orderBy('container_code')
+            ->pluck('container_code')
+            ->values();
+
+        return response()->json(['containers' => $codes]);
     }
 
     public function update(Request $request, Expense $expense): JsonResponse

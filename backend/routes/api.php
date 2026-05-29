@@ -55,6 +55,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/payments/{payment}/proof', [PaymentController::class, 'downloadProof']);
 
     // Expenses
+    Route::get('/expenses/containers', [ExpenseController::class, 'containers']);
     Route::apiResource('expenses', ExpenseController::class);
     Route::post('/expenses/{expense}/approve', [ExpenseController::class, 'approve']);
     Route::post('/expenses/{expense}/reject', [ExpenseController::class, 'reject']);

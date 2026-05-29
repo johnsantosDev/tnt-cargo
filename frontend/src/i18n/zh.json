@@ -209,7 +209,13 @@
     "pending": "待处理",
     "all_statuses": "所有状态",
     "search_placeholder": "按参考号、类别搜索...",
-    "no_expenses": "未找到支出记录"
+    "no_expenses": "未找到支出记录",
+    "link_container": "关联到集装箱？",
+    "select_container": "选择集装箱",
+    "container_not_found": "未找到集装箱（手动输入）",
+    "container_custom": "集装箱代码",
+    "container_custom_placeholder": "例如：CONT-123",
+    "container_required": "请选择或输入集装箱。"
   },
   "cash_advances": {
     "title": "现金预付",
@@ -349,7 +355,8 @@
     "payment_unbilled": "未开票",
     "packing_lists": "装箱单",
     "invoice_breakdown": "发票明细",
-    "expedition_fees": "运输费用"
+    "expedition_fees": "运输费用",
+    "container_linked_expenses": "集装箱关联支出"
   },
   "settings": {
     "title": "设置",

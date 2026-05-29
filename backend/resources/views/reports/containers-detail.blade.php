@@ -213,6 +213,37 @@
         </tbody>
     </table>
 
+    {{-- Container-linked expenses (entries from the expenses table tagged with this container code) --}}
+    @if(isset($linkedExpenses) && $linkedExpenses->count() > 0)
+        <div class="section-title">Dépenses liées au container ({{ $linkedExpenses->count() }})</div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Référence</th>
+                    <th>Catégorie</th>
+                    <th>Description</th>
+                    <th>Date</th>
+                    <th class="text-right">Montant</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($linkedExpenses as $e)
+                    <tr>
+                        <td><strong>{{ $e['reference'] }}</strong></td>
+                        <td>{{ $e['category'] }}</td>
+                        <td>{{ $e['description'] }}</td>
+                        <td>{{ $e['expense_date'] ? \Carbon\Carbon::parse($e['expense_date'])->format('d/m/Y') : '—' }}</td>
+                        <td class="text-right red">${{ number_format($e['amount'], 2, ',', ' ') }}</td>
+                    </tr>
+                @endforeach
+                <tr class="total-row">
+                    <td colspan="4">TOTAL Dépenses liées</td>
+                    <td class="text-right">${{ number_format($linkedExpenses->sum('amount'), 2, ',', ' ') }}</td>
+                </tr>
+            </tbody>
+        </table>
+    @endif
+
     <div class="footer">
         <div class="footer-brand">TNT Cargo — Rapport Container Confidentiel</div>
         <div>Container {{ $containerCode }} | {{ $selectedRegion }} | Généré le {{ now()->format('d/m/Y à H:i') }}</div>

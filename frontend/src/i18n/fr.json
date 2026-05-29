@@ -334,7 +334,13 @@
     "pending": "En attente",
     "all_statuses": "Tous les statuts",
     "search_placeholder": "Rechercher par référence, catégorie...",
-    "no_expenses": "Aucune dépense trouvée"
+    "no_expenses": "Aucune dépense trouvée",
+    "link_container": "Liée à un container ?",
+    "select_container": "Sélectionner le container",
+    "container_not_found": "Container non trouvé (saisir manuellement)",
+    "container_custom": "Code container",
+    "container_custom_placeholder": "Ex: CONT-123",
+    "container_required": "Veuillez sélectionner ou saisir un container."
   },
   "cash_advances": {
     "title": "Cash Advance",
@@ -482,7 +488,8 @@
     "payment_unbilled": "Non facturée",
     "packing_lists": "Listes de colisage",
     "invoice_breakdown": "Détail facture",
-    "expedition_fees": "Frais d'expédition"
+    "expedition_fees": "Frais d'expédition",
+    "container_linked_expenses": "Dépenses liées au container"
   },
   "settings": {
     "title": "Paramètres",
