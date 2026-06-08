@@ -45,6 +45,7 @@ export default function TrackingPage() {
   const timeline = data?.timeline || [];
   const allStatuses = data?.all_statuses || [];
   const packingLists = shipment?.packing_lists || [];
+  const isClientView = Boolean(shareToken || shareTokenParam);
 
   const getStatusIcon = (slug) => {
     const icons = {
@@ -400,8 +401,8 @@ export default function TrackingPage() {
                     </div>
                   </div>
 
-                  {/* Per-PL fees breakdown (only if any PL has shipping/aux fees) */}
-                  {packingLists.some(pl => Number(pl.shipping_cost || 0) > 0 || Number(pl.additional_fees || 0) > 0) && (
+                  {/* Per-PL fees breakdown (only if any PL has shipping/aux fees, hidden for client share views) */}
+                  {!isClientView && packingLists.some(pl => Number(pl.shipping_cost || 0) > 0 || Number(pl.additional_fees || 0) > 0) && (
                     <div className="border rounded-lg overflow-hidden">
                       <table className="w-full text-sm">
                         <thead className="bg-gray-50">
