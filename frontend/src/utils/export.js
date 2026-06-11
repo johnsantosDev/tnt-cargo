@@ -6,8 +6,22 @@
  * @param {string} fileName  – desired file name (e.g. "facture-12.pdf")
  * @param {string} phone     – WhatsApp phone number (any format; digits are extracted)
  */
+export function normalizeWhatsAppNumber(phone) {
+  return String(phone || '').replace(/\D/g, '');
+}
+
+export function buildWhatsAppNumber({ phone_code = '', phone = '' } = {}) {
+  const code = normalizeWhatsAppNumber(phone_code);
+  let number = normalizeWhatsAppNumber(phone);
+  if (!code) return number;
+  if (!number) return code;
+  if (number.startsWith(code)) return number;
+  if (number.startsWith('0')) number = number.slice(1);
+  return normalizeWhatsAppNumber(`${code}${number}`);
+}
+
 export async function sendViaWhatsApp(blob, fileName, phone) {
-  const cleanPhone = phone.replace(/\D/g, '');
+  const cleanPhone = normalizeWhatsAppNumber(phone);
   const file = new File([blob], fileName, { type: blob.type || 'application/pdf' });
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 

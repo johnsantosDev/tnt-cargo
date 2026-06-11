@@ -7,7 +7,7 @@ import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinne
 import SearchableSelect from '../components/ui/SearchableSelect';
 import { Plus, Search, Edit2, Trash2, Download, Eye, MessageCircle } from 'lucide-react';
 import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
-import { sendViaWhatsApp } from '../utils/export';
+import { buildWhatsAppNumber, sendViaWhatsApp } from '../utils/export';
 import ExportButtons from '../components/ui/ExportButtons';
 import toast from 'react-hot-toast';
 
@@ -86,7 +86,7 @@ export default function PaymentsPage() {
           </button>
           <button
             onClick={() => setWhatsappModal({
-              phone: row.client?.phone || '',
+              phone: buildWhatsAppNumber({ phone_code: row.client?.phone_code, phone: row.client?.phone }),
               fileName: `recu-${row.client?.name || ''}-${row.reference}.pdf`,
               getBlob: async () => { const r = await api.get(`/payments/${row.id}/pdf`, { responseType: 'blob' }); return r.data; },
             })}

@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Card, CardHeader, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal, Textarea } from '../components/ui';
 import SearchableSelect from '../components/ui/SearchableSelect';
 import { Plus, Search, DollarSign, Edit2, Eye, Printer, MessageCircle, Trash2 } from 'lucide-react';
-import { exportCashAdvanceInvoice, sendViaWhatsApp } from '../utils/export';
+import { buildWhatsAppNumber, exportCashAdvanceInvoice, sendViaWhatsApp } from '../utils/export';
 import ExportButtons from '../components/ui/ExportButtons';
 import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
 import toast from 'react-hot-toast';
@@ -259,7 +259,7 @@ function CashAdvanceDetailModal({ advance: initialAdvance, onClose, onWhatsApp }
           </button>
           <button
             onClick={() => onWhatsApp({
-              phone: advance.client?.phone || '',
+              phone: buildWhatsAppNumber({ phone_code: advance.client?.phone_code, phone: advance.client?.phone }),
               fileName: `avance-${advance.reference}.pdf`,
               getBlob: async () => exportCashAdvanceInvoice(advance, t, { returnBlob: true }),
             })}

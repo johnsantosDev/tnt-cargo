@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal, Textarea } from '../components/ui';
 import { Plus, Search, Download, Eye, Plane, Edit, Trash2, RotateCcw, Upload, Paperclip, MessageCircle } from 'lucide-react';
 import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
-import { sendViaWhatsApp } from '../utils/export';
+import { buildWhatsAppNumber, sendViaWhatsApp } from '../utils/export';
 import ExportButtons from '../components/ui/ExportButtons';
 import toast from 'react-hot-toast';
 
@@ -163,7 +163,7 @@ export default function FlightTicketsPage() {
           <button onClick={() => handleDownload(row.id)} className="p-1.5 text-gray-400 hover:text-green-600" title={t('flight_tickets.receipt')}><Download className="w-4 h-4" /></button>
           <button
             onClick={() => setWhatsappModal({
-              phone: row.client?.phone || row.passenger_phone || '',
+              phone: buildWhatsAppNumber({ phone_code: row.client?.phone_code, phone: row.client?.phone || row.passenger_phone }),
               fileName: `receipt-${row.id}.pdf`,
               getBlob: async () => { const r = await api.get(`/flight-tickets/${row.id}/receipt`, { responseType: 'blob' }); return r.data; },
             })}
@@ -255,7 +255,7 @@ export default function FlightTicketsPage() {
           onClose={() => setShowDetail(null)}
           onDownload={handleDownload}
           onWhatsApp={(ticket) => setWhatsappModal({
-            phone: ticket.client?.phone || ticket.passenger_phone || '',
+            phone: buildWhatsAppNumber({ phone_code: ticket.client?.phone_code, phone: ticket.client?.phone || ticket.passenger_phone }),
             fileName: `receipt-${ticket.id}.pdf`,
             getBlob: async () => { const r = await api.get(`/flight-tickets/${ticket.id}/receipt`, { responseType: 'blob' }); return r.data; },
           })}

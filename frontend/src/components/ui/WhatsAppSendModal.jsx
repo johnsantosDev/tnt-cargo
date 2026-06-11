@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { MessageCircle, Loader2 } from 'lucide-react';
+import { normalizeWhatsAppNumber } from '../../utils/export';
 
 /**
  * Modal to collect/confirm the WhatsApp phone number before sending a file.
@@ -10,7 +11,7 @@ import { MessageCircle, Loader2 } from 'lucide-react';
  *                   The parent is responsible for closing the modal (via setWhatsappModal(null)).
  */
 export default function WhatsAppSendModal({ phone: initialPhone = '', onClose, onSend }) {
-  const [phone, setPhone] = useState(initialPhone);
+  const [phone, setPhone] = useState(normalizeWhatsAppNumber(initialPhone));
   const [isSending, setIsSending] = useState(false);
 
   const handleSend = () => {
@@ -32,15 +33,15 @@ export default function WhatsAppSendModal({ phone: initialPhone = '', onClose, o
           Envoyer via WhatsApp
         </h3>
         <p className="text-sm text-gray-500">
-          Numéro WhatsApp du destinataire (avec indicatif pays, ex.&nbsp;+243812345678).
+          Numéro WhatsApp du destinataire (avec indicatif pays, ex.&nbsp;243812345678).
           Modifiez-le si nécessaire avant d&apos;envoyer.
         </p>
         <input
           type="tel"
           value={phone}
-          onChange={(e) => setPhone(e.target.value)}
+          onChange={(e) => setPhone(normalizeWhatsAppNumber(e.target.value))}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="+243..."
+          placeholder="243..."
           autoFocus
           disabled={isSending}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none disabled:opacity-60"

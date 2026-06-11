@@ -5,7 +5,7 @@ import api from '../services/api';
 import { Card, CardHeader, CardBody, Badge, Spinner, Button } from '../components/ui';
 import { ArrowLeft, Download, CreditCard, FileText, Image as ImageIcon, Eye, X, MessageCircle, CornerDownRightIcon, CornerDownLeft } from 'lucide-react';
 import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
-import { sendViaWhatsApp } from '../utils/export';
+import { buildWhatsAppNumber, sendViaWhatsApp } from '../utils/export';
 import toast from 'react-hot-toast';
 
 export default function PaymentDetailPage() {
@@ -83,7 +83,7 @@ export default function PaymentDetailPage() {
         </Button>
         <button
           onClick={() => setWhatsappModal({
-            phone: payment.client?.phone || '',
+            phone: buildWhatsAppNumber({ phone_code: payment.client?.phone_code, phone: payment.client?.phone }),
             fileName: `recu-${payment.client?.name || ''}-${payment.reference}.pdf`,
             getBlob: async () => { const r = await api.get(`/payments/${id}/pdf`, { responseType: 'blob' }); return r.data; },
           })}

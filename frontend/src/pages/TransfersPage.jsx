@@ -5,7 +5,7 @@ import api from '../services/api';
 import { Card, CardHeader, CardBody, Spinner, Badge, Pagination, Modal } from '../components/ui';
 import { ArrowRightLeft, Plus, Search, Check, X, Download, Eye, Upload, FileText, CheckCircle, MessageCircle, Trash2 } from 'lucide-react';
 import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
-import { sendViaWhatsApp } from '../utils/export';
+import { buildWhatsAppNumber, sendViaWhatsApp } from '../utils/export';
 import toast from 'react-hot-toast';
 
 const REGIONS = ['Goma', 'Beni', 'Butembo', 'Lubumbashi', 'Kolwezi', 'Kinshasa', 'Bukavu', 'China', 'Dubai'];
@@ -282,7 +282,7 @@ export default function TransfersPage() {
                           </button>
                           <button
                             onClick={() => openWhatsAppModal({
-                              phone: tr.client_phone || tr.client?.phone || '',
+                              phone: buildWhatsAppNumber({ phone_code: tr.client?.phone_code, phone: tr.client?.phone || tr.client_phone }),
                               fileName: `transfer-receipt-${tr.id}.pdf`,
                               getBlob: async () => { const r = await api.get(`/transfers/${tr.id}/receipt`, { responseType: 'blob' }); return r.data; },
                             })}
@@ -313,7 +313,7 @@ export default function TransfersPage() {
                               </button>
                               <button
                                 onClick={() => openWhatsAppModal({
-                                  phone: tr.client_phone || tr.client?.phone || '',
+                                  phone: buildWhatsAppNumber({ phone_code: tr.client?.phone_code, phone: tr.client?.phone || tr.client_phone }),
                                   fileName: `transfer-completion-${tr.id}.pdf`,
                                   getBlob: async () => { const r = await api.get(`/transfers/${tr.id}/completion-pdf`, { responseType: 'blob' }); return r.data; },
                                 })}
@@ -504,7 +504,7 @@ export default function TransfersPage() {
                 </button>
                 <button
                   onClick={() => openWhatsAppModal({
-                    phone: showDetail.client_phone || showDetail.client?.phone || '',
+                    phone: buildWhatsAppNumber({ phone_code: showDetail.client?.phone_code, phone: showDetail.client?.phone || showDetail.client_phone }),
                     fileName: `transfer-doc-${showDetail.reference}`,
                     getBlob: async () => { const r = await api.get(`/transfers/${showDetail.id}/document`, { responseType: 'blob' }); return r.data; },
                   })}
@@ -538,7 +538,7 @@ export default function TransfersPage() {
                     </button>
                     <button
                       onClick={() => openWhatsAppModal({
-                        phone: showDetail.client_phone || showDetail.client?.phone || '',
+                        phone: buildWhatsAppNumber({ phone_code: showDetail.client?.phone_code, phone: showDetail.client?.phone || showDetail.client_phone }),
                         fileName: `signed-completion-${showDetail.reference}`,
                         getBlob: async () => { const r = await api.get(`/transfers/${showDetail.id}/signed-document`, { responseType: 'blob' }); return r.data; },
                       })}
@@ -577,7 +577,7 @@ export default function TransfersPage() {
               </button>
               <button
                 onClick={() => openWhatsAppModal({
-                  phone: showDetail.client_phone || showDetail.client?.phone || '',
+                  phone: buildWhatsAppNumber({ phone_code: showDetail.client?.phone_code, phone: showDetail.client?.phone || showDetail.client_phone }),
                   fileName: `transfer-receipt-${showDetail.id}.pdf`,
                   getBlob: async () => { const r = await api.get(`/transfers/${showDetail.id}/receipt`, { responseType: 'blob' }); return r.data; },
                 })}
@@ -597,7 +597,7 @@ export default function TransfersPage() {
                   </button>
                   <button
                     onClick={() => openWhatsAppModal({
-                      phone: showDetail.client_phone || showDetail.client?.phone || '',
+                      phone: buildWhatsAppNumber({ phone_code: showDetail.client?.phone_code, phone: showDetail.client?.phone || showDetail.client_phone }),
                       fileName: `transfer-completion-${showDetail.id}.pdf`,
                       getBlob: async () => { const r = await api.get(`/transfers/${showDetail.id}/completion-pdf`, { responseType: 'blob' }); return r.data; },
                     })}

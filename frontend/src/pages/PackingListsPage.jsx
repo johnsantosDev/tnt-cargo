@@ -8,7 +8,7 @@ import SearchableSelect from '../components/ui/SearchableSelect';
 import { Plus, Search, Eye, Package, CheckCircle, FileText, Trash2, Edit3, Box, Settings2, Truck, DollarSign, Download, MessageCircle } from 'lucide-react';
 import ExportButtons from '../components/ui/ExportButtons';
 import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
-import { sendViaWhatsApp } from '../utils/export';
+import { buildWhatsAppNumber, sendViaWhatsApp } from '../utils/export';
 import toast from 'react-hot-toast';
 
 export default function PackingListsPage() {
@@ -782,7 +782,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh, afterMutation, ope
                             <button onClick={() => downloadItemReceipt(item.id)} className="p-1 text-gray-400 hover:text-green-600" title={t('packing_list.download_receipt')}><Download className="w-3.5 h-3.5" /></button>
                             <button
                               onClick={() => openWhatsAppModal({
-                                phone: pl.client?.phone || '',
+                                phone: buildWhatsAppNumber({ phone_code: pl.client?.phone_code, phone: pl.client?.phone }),
                                 fileName: `receipt-item-${item.id}.pdf`,
                                 getBlob: async () => { const r = await api.get(`/packing-lists/${listId}/items/${item.id}/receipt`, { responseType: 'blob' }); return r.data; },
                               })}
@@ -800,7 +800,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh, afterMutation, ope
                             <button onClick={() => downloadItemReceipt(item.id)} className="p-1 text-gray-400 hover:text-green-600" title={t('packing_list.download_receipt')}><Download className="w-3.5 h-3.5" /></button>
                             <button
                               onClick={() => openWhatsAppModal({
-                                phone: pl.client?.phone || '',
+                                phone: buildWhatsAppNumber({ phone_code: pl.client?.phone_code, phone: pl.client?.phone }),
                                 fileName: `receipt-item-${item.id}.pdf`,
                                 getBlob: async () => { const r = await api.get(`/packing-lists/${listId}/items/${item.id}/receipt`, { responseType: 'blob' }); return r.data; },
                               })}
@@ -841,7 +841,7 @@ function PackingListDetailModal({ listId, onClose, onRefresh, afterMutation, ope
           </Button>
           <button
             onClick={() => openWhatsAppModal({
-              phone: pl.client?.phone || '',
+              phone: buildWhatsAppNumber({ phone_code: pl.client?.phone_code, phone: pl.client?.phone }),
               fileName: `packing-list-${listId}.pdf`,
               getBlob: async () => { const r = await api.get(`/packing-lists/${listId}/receipt`, { responseType: 'blob' }); return r.data; },
             })}

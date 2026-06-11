@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select, Table, Pagination, Badge, Spinner, Modal } from '../components/ui';
 import { Plus, Search, Download, FileText, Eye, MessageCircle, Trash2, DollarSign, Pencil } from 'lucide-react';
 import WhatsAppSendModal from '../components/ui/WhatsAppSendModal';
-import { sendViaWhatsApp } from '../utils/export';
+import { buildWhatsAppNumber, sendViaWhatsApp } from '../utils/export';
 import ExportButtons from '../components/ui/ExportButtons';
 import toast from 'react-hot-toast';
 
@@ -134,7 +134,7 @@ export default function InvoicesPage() {
           <button onClick={() => handleDownload(row.id)} className="p-1.5 text-gray-400 hover:text-green-600" title={t('common.download')}><Download className="w-4 h-4" /></button>
           <button
             onClick={() => setWhatsappModal({
-              phone: row.client?.phone || '',
+              phone: buildWhatsAppNumber({ phone_code: row.client?.phone_code, phone: row.client?.phone }),
               fileName: `facture-${row.id}.pdf`,
               getBlob: async () => { const r = await api.get(`/invoices/${row.id}/pdf`, { responseType: 'blob' }); return r.data; },
             })}
@@ -200,7 +200,7 @@ export default function InvoicesPage() {
           onClose={() => setShowDetail(null)}
           onDownload={handleDownload}
           onWhatsApp={(invoice) => setWhatsappModal({
-            phone: invoice.client?.phone || '',
+            phone: buildWhatsAppNumber({ phone_code: invoice.client?.phone_code, phone: invoice.client?.phone }),
             fileName: `facture-${invoice.id}.pdf`,
             getBlob: async () => { const r = await api.get(`/invoices/${invoice.id}/pdf`, { responseType: 'blob' }); return r.data; },
           })}
